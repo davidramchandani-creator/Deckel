@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+:root {
+  --color-paper: #f4f1ea;
+  --color-paper-dark: #e8e3d6;
+  --color-ink: #26241f;
+  --color-ink-soft: #6b6659;
+  --color-rule: #26241f;
+}
+
+@theme inline {
+  --color-paper: var(--color-paper);
+  --color-paper-dark: var(--color-paper-dark);
+  --color-ink: var(--color-ink);
+  --color-ink-soft: var(--color-ink-soft);
+  --color-rule: var(--color-rule);
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+/* Receipt-style dotted leader between a label and an amount, e.g.
+   <span className="leader">...</span> stretched between two flex items. */
+.leader {
+  flex: 1 1 auto;
+  border-bottom: 1px dotted var(--color-ink-soft);
+  margin: 0 0.5em;
+  height: 0.6em;
+}
+
+.rule-double {
+  border-top: 3px double var(--color-rule);
+}
+
+.rule-single {
+  border-top: 1px solid var(--color-rule);
+}

@@ -1,0 +1,157 @@
+import { createClient } from "@/lib/supabase/server";
+import {
+  computeSettlement,
+  currentPeriodDay,
+  totalPoints,
+  type ActivityKind,
+  type Participant,
+} from "@/lib/rules";
+import type { Activity, Member, Period } from "@/lib/types";
+
+export interface SettlementRow {
+  memberId: string;
+  displayName: string;
+  points: number;
+  status: "active" | "sick" | "withdrawn";
+  capApplied: number;
+  owed: number;
+  isRecordHolder: boolean;
+  activities: Activity[];
+}
+
+export interface GroupSettlementView {
+  groupId: string;
+  groupName: string;
+  period: Period;
+  daysRemaining: number;
+  currentDay: number;
+  rows: SettlementRow[];
+  record: number;
+  pot: number;
+  perHead: number;
+  currency: string;
+}
+
+/**
+ * Loads the caller's group, its currently open period, and computes the
+ * full settlement (points, cap, owed) for every member -- the data the
+ * Rangliste view renders. Returns null if the caller has no group yet.
+ */
+export async function getMySettlementView(): Promise<GroupSettlementView | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: membership } = await supabase
+    .from("members")
+    .select("id, group_id, groups(id, name)")
+    .eq("user_id", user.id)
+    .limit(1)
+    .maybeSingle();
+  if (!membership) return null;
+
+  const group = Array.isArray(membership.groups) ? membership.groups[0] : membership.groups;
+
+  const { data: period } = await supabase
+    .from("periods")
+    .select("*")
+    .eq("group_id", membership.group_id)
+    .eq("status", "open")
+    .order("starts_on", { ascending: false })
+    .limit(1)
+    .maybeSingle<Period>();
+
+  if (!period) return null;
+
+  const { data: members } = await supabase
+    .from("members")
+    .select("*")
+    .eq("group_id", membership.group_id);
+
+  const { data: participations } = await supabase
+    .from("participations")
+    .select("*")
+    .eq("period_id", period.id);
+
+  const { data: activities } = await supabase
+    .from("activities")
+    .select("*")
+    .eq("period_id", period.id);
+
+  const bikeFactor = period.settings_snapshot.bike_factor;
+  const capChf = period.settings_snapshot.cap_chf;
+  const periodDays = period.settings_snapshot.period_days;
+
+  const activitiesByMember = new Map<string, Activity[]>();
+  for (const a of (activities as Activity[] | null) ?? []) {
+    const list = activitiesByMember.get(a.member_id) ?? [];
+    list.push(a);
+    activitiesByMember.set(a.member_id, list);
+  }
+
+  const partByMember = new Map<
+    string,
+    { status: "active" | "sick" | "withdrawn"; sick_from_day: number | null }
+  >();
+  for (const p of (participations as
+    | { member_id: string; status: "active" | "sick" | "withdrawn"; sick_from_day: number | null }[]
+    | null) ?? []) {
+    partByMember.set(p.member_id, { status: p.status, sick_from_day: p.sick_from_day });
+  }
+
+  const participants: Participant[] = ((members as Member[] | null) ?? []).map((m) => {
+    const memberActivities = activitiesByMember.get(m.id) ?? [];
+    const points = totalPoints(
+      memberActivities.map((a) => ({ kind: a.sport_type as ActivityKind, distanceKm: Number(a.distance_km) })),
+      bikeFactor
+    );
+    const participation = partByMember.get(m.id);
+    return {
+      memberId: m.id,
+      points,
+      status: participation?.status ?? "active",
+      sickFromDay: participation?.sick_from_day ?? undefined,
+    };
+  });
+
+  const result = computeSettlement(participants, capChf, periodDays);
+
+  const memberById = new Map(((members as Member[] | null) ?? []).map((m) => [m.id, m]));
+
+  const rows: SettlementRow[] = result.lines
+    .map((line) => ({
+      memberId: line.memberId,
+      displayName: memberById.get(line.memberId)?.display_name ?? "?",
+      points: line.points,
+      status: line.status,
+      capApplied: line.capApplied,
+      owed: line.owed,
+      isRecordHolder: line.isRecordHolder,
+      activities: (activitiesByMember.get(line.memberId) ?? []).sort(
+        (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime()
+      ),
+    }))
+    .sort((a, b) => b.points - a.points);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const startsOn = new Date(period.starts_on + "T00:00:00");
+  const day = currentPeriodDay(startsOn, today, periodDays);
+
+  const activeCount = rows.filter((r) => r.status !== "withdrawn").length;
+
+  return {
+    groupId: membership.group_id,
+    groupName: group?.name ?? "",
+    period,
+    daysRemaining: Math.max(0, periodDays - day),
+    currentDay: day,
+    rows,
+    record: result.record,
+    pot: result.pot,
+    perHead: activeCount > 0 ? Math.round((result.pot / activeCount) * 100) / 100 : 0,
+    currency: period.settings_snapshot.currency,
+  };
+}

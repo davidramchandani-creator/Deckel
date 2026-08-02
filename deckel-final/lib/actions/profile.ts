@@ -29,15 +29,36 @@ export async function updateGroupRules(
 ): Promise<ProfileState> {
   const groupId = String(formData.get("group_id") ?? "");
   const periodDays = Number(formData.get("period_days"));
-  const bikeFactor = Number(formData.get("bike_factor"));
   const capChf = Number(formData.get("cap_chf"));
 
+  // Collect the sports form fields (sport_<key>_enabled / sport_<key>_rate)
+  // into the JSON shape the RPC validates. Only known catalog keys are
+  // forwarded -- anything else in the form data is ignored.
+  const { SPORTS_CATALOG } = await import("@/lib/sports");
+  const sports: Record<string, { rate: number; enabled: boolean }> = {};
+  let enabledCount = 0;
+  for (const def of SPORTS_CATALOG) {
+    const enabled = formData.get(`sport_${def.key}_enabled`) === "on";
+    const rate = Number(formData.get(`sport_${def.key}_rate`) ?? def.rate);
+    if (!Number.isFinite(rate) || rate < 0.01 || rate > 10) {
+      return {
+        status: "error",
+        message: `Punkte für ${def.label} müssen zwischen 0.01 und 10 liegen.`,
+      };
+    }
+    sports[def.key] = { rate, enabled };
+    if (enabled) enabledCount++;
+  }
+  if (enabledCount === 0) {
+    return { status: "error", message: "Mindestens eine Sportart muss aktiv sein." };
+  }
+
   const supabase = await createClient();
-  const { error } = await supabase.rpc("update_group_rules", {
+  const { error } = await supabase.rpc("update_group_rules_v2", {
     p_group_id: groupId,
     p_period_days: periodDays,
-    p_bike_factor: bikeFactor,
     p_cap_chf: capChf,
+    p_sports: sports,
   });
   if (error) return { status: "error", message: error.message };
 

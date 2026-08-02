@@ -10,14 +10,16 @@ import { useState } from "react";
  * leaderboard, collapsed by default, and explains it in the group's own
  * terms using their actual configured values.
  */
+import type { SportDef } from "@/lib/sports";
+
 export function Explainer({
   periodDays,
-  bikeFactor,
+  sports,
   cap,
   currency,
 }: {
   periodDays: number;
-  bikeFactor: number;
+  sports: SportDef[];
   cap: number;
   currency: string;
 }) {
@@ -45,11 +47,21 @@ export function Explainer({
 
           <div>
             <p className="text-ink font-medium mb-1">Punkte</p>
-            <p>
-              1 km Laufen ergibt 1.0 Punkt. 1 km Velo ergibt{" "}
-              {bikeFactor.toFixed(2)} Punkte. Schwimmen, Spazieren und alles
-              andere zählt nicht. Alle Kilometer kommen direkt aus Strava —
-              von Hand eintragen geht nicht, damit für alle dasselbe gilt.
+            <ul className="space-y-0.5">
+              {sports.map((sp) => (
+                <li key={sp.key} className="flex items-baseline">
+                  <span>{sp.label}</span>
+                  <span className="leader" aria-hidden="true" />
+                  <span className="num">
+                    {sp.rate} P/{sp.unit === "km" ? "km" : "min"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1.5">
+              Alles andere zählt nicht. Alle Aktivitäten kommen direkt aus
+              Strava — von Hand eintragen geht nicht, damit für alle dasselbe
+              gilt.
             </p>
           </div>
 

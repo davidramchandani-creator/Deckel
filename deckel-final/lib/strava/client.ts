@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { classifyActivity } from "@/lib/rules";
+import { classifyBySports, type SportDef } from "@/lib/sports";
 
 /**
  * Strava API helpers.
@@ -188,16 +188,17 @@ export async function fetchAthleteActivities(
 export function toActivityRow(
   activity: StravaActivity,
   memberId: string,
-  periodId: string | null
+  periodId: string | null,
+  sports: SportDef[]
 ) {
-  const kind = classifyActivity(activity.sport_type ?? activity.type);
-  if (!kind) return null;
+  const sport = classifyBySports(activity.sport_type ?? activity.type, sports);
+  if (!sport) return null;
 
   return {
     member_id: memberId,
     period_id: periodId,
     strava_activity_id: activity.id,
-    sport_type: kind,
+    sport_type: sport.key,
     distance_km: Math.round((activity.distance / 1000) * 1000) / 1000,
     moving_time_s: activity.moving_time,
     started_at: activity.start_date,

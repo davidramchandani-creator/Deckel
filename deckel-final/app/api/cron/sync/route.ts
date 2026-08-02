@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/server-admin";
 import { isAuthorizedCron } from "@/lib/cron/auth";
 import { processWebhookEvent } from "@/lib/strava/process";
 import { fetchAthleteActivities, getValidAccessToken, toActivityRow } from "@/lib/strava/client";
+import { sportsFromSnapshot } from "@/lib/sports";
 import { NextResponse, type NextRequest } from "next/server";
 
 export const maxDuration = 60;
@@ -51,10 +52,11 @@ export async function GET(request: NextRequest) {
   // 2. Full reconcile for every open period.
   const { data: periods } = await admin
     .from("periods")
-    .select("id, group_id, starts_on, ends_on")
+    .select("id, group_id, starts_on, ends_on, settings_snapshot")
     .eq("status", "open");
 
   for (const period of periods ?? []) {
+    const sports = sportsFromSnapshot(period.settings_snapshot ?? {});
     const { data: members } = await admin
       .from("members")
       .select("id")
@@ -69,7 +71,7 @@ export async function GET(request: NextRequest) {
         const accessToken = await getValidAccessToken(admin, member.id);
         const activities = await fetchAthleteActivities(accessToken, afterTs, beforeTs);
         const rows = activities
-          .map((a) => toActivityRow(a, member.id, period.id))
+          .map((a) => toActivityRow(a, member.id, period.id, sports))
           .filter((r): r is NonNullable<typeof r> => r !== null);
 
         if (rows.length > 0) {

@@ -9,6 +9,7 @@ import { GroupSwitcher } from "./group-switcher";
 import { LeaveGroup } from "./leave-group";
 import { PromoteButton } from "./promote";
 import { Sheet, SectionLabel, Line, money } from "@/components/receipt";
+import type { SportsConfig } from "@/lib/sports";
 import { PushToggle } from "@/components/push-toggle";
 
 export const dynamic = "force-dynamic";
@@ -145,13 +146,12 @@ export default async function GruppePage() {
             <RulesForm
               groupId={active.groupId}
               periodDays={settings.period_days}
-              bikeFactor={Number(settings.bike_factor)}
               capChf={Number(settings.cap_chf)}
+              sports={(settings as GroupSettings & { sports?: SportsConfig | null }).sports ?? null}
             />
           ) : (
             <div className="text-sm">
               <Line left="Periode" right={`${settings.period_days} Tage`} />
-              <Line left="Velo-Faktor" right={Number(settings.bike_factor).toFixed(2)} />
               <Line
                 left="Deckel"
                 right={money(Number(settings.cap_chf), settings.currency)}

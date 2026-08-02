@@ -3,7 +3,7 @@ import type { Activity, Participation, Period } from "@/lib/types";
 import { getActiveMembership } from "@/lib/active-group";
 import { StatusSwitch } from "./status-switch";
 import { Sheet, SectionLabel, Line, points } from "@/components/receipt";
-import { totalPoints, type ActivityKind } from "@/lib/rules";
+import { sportsFromSnapshot, totalPointsFor, sportByKey, formatAmount } from "@/lib/sports";
 
 export const dynamic = "force-dynamic";
 
@@ -66,21 +66,28 @@ export default async function MeineAktivitaetenPage({
   const status = participation?.status ?? "active";
   const snapshot = period.settings_snapshot;
   const periodStarted = new Date(period.starts_on) <= new Date();
+  const sports = sportsFromSnapshot(snapshot);
 
-  const myPoints = totalPoints(
-    (activities ?? []).map((a) => ({
-      kind: a.sport_type as ActivityKind,
-      distanceKm: Number(a.distance_km),
-    })),
-    snapshot.bike_factor
-  );
+  const scorables = (activities ?? []).map((a) => ({
+    sportKey: a.sport_type,
+    distanceKm: Number(a.distance_km),
+    movingTimeMin: (a.moving_time_s ?? 0) / 60,
+  }));
+  const myPoints = totalPointsFor(scorables, sports);
 
-  const runKm = (activities ?? [])
-    .filter((a) => a.sport_type === "run")
-    .reduce((s, a) => s + Number(a.distance_km), 0);
-  const bikeKm = (activities ?? [])
-    .filter((a) => a.sport_type === "bike")
-    .reduce((s, a) => s + Number(a.distance_km), 0);
+  // Per-sport totals for the balance card, only sports with activity.
+  const perSport = sports
+    .map((sp) => {
+      const mine = scorables.filter((a) => a.sportKey === sp.key);
+      if (mine.length === 0) return null;
+      const km = mine.reduce((s, a) => s + a.distanceKm, 0);
+      const min = mine.reduce((s, a) => s + a.movingTimeMin, 0);
+      return {
+        label: sp.label,
+        amount: sp.unit === "km" ? `${km.toFixed(1)} km` : `${Math.round(min)} min`,
+      };
+    })
+    .filter((x): x is { label: string; amount: string } => x !== null);
 
   return (
     <div className="space-y-5">
@@ -103,8 +110,12 @@ export default async function MeineAktivitaetenPage({
       <Sheet className="perforated-top">
         <SectionLabel>Deine Bilanz · {active.groupName}</SectionLabel>
         <Line emphasis left="Punkte" right={points(myPoints)} />
-        <Line left="Laufen" right={`${runKm.toFixed(1)} km`} />
-        <Line left="Velo" right={`${bikeKm.toFixed(1)} km`} />
+        {perSport.map((row) => (
+          <Line key={row.label} left={row.label} right={row.amount} />
+        ))}
+        {perSport.length === 0 && (
+          <p className="text-xs text-ink-soft">Noch keine Aktivität in dieser Periode.</p>
+        )}
       </Sheet>
 
       <Sheet>
@@ -150,8 +161,15 @@ export default async function MeineAktivitaetenPage({
             {activities.map((a) => (
               <li key={a.id} className="rule-single first:border-t-0">
                 <Line
-                  left={a.sport_type === "run" ? "Lauf" : "Velo"}
-                  right={`${Number(a.distance_km).toFixed(1)} km`}
+                  left={sportByKey(a.sport_type, sports)?.label ?? a.sport_type}
+                  right={formatAmount(
+                    {
+                      sportKey: a.sport_type,
+                      distanceKm: Number(a.distance_km),
+                      movingTimeMin: (a.moving_time_s ?? 0) / 60,
+                    },
+                    sports
+                  )}
                   sub={
                     <span className="text-ink-faint">
                       {new Date(a.started_at).toLocaleDateString("de-CH", {

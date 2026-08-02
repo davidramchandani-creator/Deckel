@@ -1,11 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import {
-  computeSettlement,
-  currentPeriodDay,
-  totalPoints,
-  type ActivityKind,
-  type Participant,
-} from "@/lib/rules";
+import { computeSettlement, currentPeriodDay, type Participant } from "@/lib/rules";
+import { sportsFromSnapshot, totalPointsFor, type SportDef } from "@/lib/sports";
 import type { Activity, Member, Period } from "@/lib/types";
 import { getActiveMembership } from "@/lib/active-group";
 
@@ -20,7 +15,19 @@ export interface SettlementRow {
   activities: Activity[];
 }
 
+export interface CatchUp {
+  /** Who is directly ahead of me (or null when leading). */
+  aheadName: string;
+  /** Points needed to pass them. */
+  pointsNeeded: number;
+  /** Concrete suggestions in the group's enabled sports, best first. */
+  suggestions: { label: string; amount: string }[];
+  /** True when the person ahead is the leader. */
+  aheadIsLeader: boolean;
+}
+
 export interface MyStanding {
+  catchUp: CatchUp | null;
   memberId: string;
   displayName: string;
   points: number;
@@ -38,6 +45,7 @@ export interface MyStanding {
 }
 
 export interface GroupSettlementView {
+  sports: SportDef[];
   groupId: string;
   groupName: string;
   isAdmin: boolean;
@@ -93,9 +101,9 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
       supabase.from("activities").select("*").eq("period_id", period.id),
     ]);
 
-  const bikeFactor = period.settings_snapshot.bike_factor;
   const capChf = period.settings_snapshot.cap_chf;
   const periodDays = period.settings_snapshot.period_days;
+  const sports = sportsFromSnapshot(period.settings_snapshot);
 
   const activitiesByMember = new Map<string, Activity[]>();
   for (const a of (activities as Activity[] | null) ?? []) {
@@ -116,9 +124,13 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
 
   const participants: Participant[] = ((members as Member[] | null) ?? []).map((m) => {
     const memberActivities = activitiesByMember.get(m.id) ?? [];
-    const points = totalPoints(
-      memberActivities.map((a) => ({ kind: a.sport_type as ActivityKind, distanceKm: Number(a.distance_km) })),
-      bikeFactor
+    const points = totalPointsFor(
+      memberActivities.map((a) => ({
+        sportKey: a.sport_type,
+        distanceKm: Number(a.distance_km),
+        movingTimeMin: (a.moving_time_s ?? 0) / 60,
+      })),
+      sports
     );
     const participation = partByMember.get(m.id);
     return {
@@ -157,8 +169,41 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
 
   const ranked = rows.filter((r) => r.status !== "withdrawn");
   const myRow = rows.find((r) => r.memberId === membership.id) ?? null;
+
+  // The catch-up calculator: turn an abstract deficit into a concrete
+  // workout. "4.2 points behind" is a number; "40 Minuten Joggen" is a plan.
+  let catchUp: CatchUp | null = null;
+  if (myRow && myRow.status !== "withdrawn") {
+    const myIdx = ranked.findIndex((r) => r.memberId === myRow.memberId);
+    const ahead = myIdx > 0 ? ranked[myIdx - 1] : null;
+    if (ahead) {
+      // Enough to pass, not merely tie: one tenth of a point beyond.
+      const pointsNeeded = Math.max(0.1, ahead.points - myRow.points + 0.1);
+      const suggestions = sports
+        .filter((sp) => sp.rate > 0)
+        .map((sp) => {
+          const amount = pointsNeeded / sp.rate;
+          return {
+            label: sp.label,
+            amount: sp.unit === "km" ? `${amount.toFixed(1)} km` : `${Math.ceil(amount)} min`,
+            effortMin: sp.unit === "km" ? amount * (sp.key === "run" ? 6 : 3) : amount,
+          };
+        })
+        .sort((a, b) => a.effortMin - b.effortMin)
+        .slice(0, 3)
+        .map(({ label, amount }) => ({ label, amount }));
+
+      catchUp = {
+        aheadName: ahead.displayName,
+        pointsNeeded,
+        suggestions,
+        aheadIsLeader: ahead.isRecordHolder,
+      };
+    }
+  }
   const me: MyStanding | null = myRow
     ? {
+        catchUp,
         memberId: myRow.memberId,
         displayName: myRow.displayName,
         points: myRow.points,
@@ -173,6 +218,7 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
     : null;
 
   return {
+    sports,
     groupId: membership.group_id,
     groupName: active.groupName,
     isAdmin: active.role === "admin",

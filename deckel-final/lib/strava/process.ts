@@ -1,6 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/server-admin";
 import { fetchActivity, getValidAccessToken, toActivityRow } from "@/lib/strava/client";
-import { computeSettlement, totalPoints, type ActivityKind, type Participant } from "@/lib/rules";
+import { sportsFromSnapshot } from "@/lib/sports";
+import { computeSettlement, type Participant } from "@/lib/rules";
+import { totalPointsFor } from "@/lib/sports";
 import { sendPushToMembers } from "@/lib/push";
 
 /**
@@ -8,21 +10,26 @@ import { sendPushToMembers } from "@/lib/push";
  * Activities outside any open period are stored with period_id = null so
  * they still exist for auditing but do not score.
  */
+interface PeriodHit {
+  id: string;
+  snapshot: Record<string, unknown>;
+}
+
 async function findPeriodForActivity(
   admin: ReturnType<typeof createAdminClient>,
   groupId: string,
   startedAt: string
-): Promise<string | null> {
+): Promise<PeriodHit | null> {
   const day = startedAt.slice(0, 10);
   const { data } = await admin
     .from("periods")
-    .select("id")
+    .select("id, settings_snapshot")
     .eq("group_id", groupId)
     .lte("starts_on", day)
     .gte("ends_on", day)
     .limit(1)
     .maybeSingle();
-  return data?.id ?? null;
+  return data ? { id: data.id, snapshot: data.settings_snapshot } : null;
 }
 
 /**
@@ -123,8 +130,13 @@ export async function processWebhookEvent(eventId: string): Promise<void> {
       return;
     }
 
-    const periodId = await findPeriodForActivity(admin, member.group_id, activity.start_date);
-    const row = toActivityRow(activity, member.id, periodId);
+    const period = await findPeriodForActivity(admin, member.group_id, activity.start_date);
+    // Which sports count is decided by the period the activity falls into.
+    // Outside any period the legacy default applies -- the row is stored
+    // with period_id null and never scores anyway.
+    const sports = sportsFromSnapshot(period?.snapshot ?? {});
+    const periodId = period?.id ?? null;
+    const row = toActivityRow(activity, member.id, periodId, sports);
 
     if (!row) {
       // Sport type we don't score (swim, walk, ...). If it was previously
@@ -189,7 +201,13 @@ async function currentLeader(
     .maybeSingle();
   if (!period) return null;
 
-  const snapshot = period.settings_snapshot as { bike_factor: number; cap_chf: number; period_days: number };
+  const snapshot = period.settings_snapshot as {
+    bike_factor: number;
+    cap_chf: number;
+    period_days: number;
+    sports?: Record<string, { rate: number; enabled: boolean }> | null;
+  };
+  const sports = sportsFromSnapshot(snapshot);
 
   const { data: members } = await admin
     .from("members")
@@ -198,7 +216,7 @@ async function currentLeader(
 
   const { data: activities } = await admin
     .from("activities")
-    .select("member_id, sport_type, distance_km")
+    .select("member_id, sport_type, distance_km, moving_time_s")
     .eq("period_id", periodId);
 
   const { data: participations } = await admin
@@ -206,10 +224,17 @@ async function currentLeader(
     .select("member_id, status, sick_from_day")
     .eq("period_id", periodId);
 
-  const byMember = new Map<string, { kind: ActivityKind; distanceKm: number }[]>();
+  const byMember = new Map<
+    string,
+    { sportKey: string; distanceKm: number; movingTimeMin: number }[]
+  >();
   for (const a of activities ?? []) {
     const list = byMember.get(a.member_id) ?? [];
-    list.push({ kind: a.sport_type as ActivityKind, distanceKm: Number(a.distance_km) });
+    list.push({
+      sportKey: a.sport_type,
+      distanceKm: Number(a.distance_km),
+      movingTimeMin: (a.moving_time_s ?? 0) / 60,
+    });
     byMember.set(a.member_id, list);
   }
 
@@ -224,7 +249,7 @@ async function currentLeader(
     const part = partByMember.get(m.id);
     return {
       memberId: m.id,
-      points: totalPoints(byMember.get(m.id) ?? [], snapshot.bike_factor),
+      points: totalPointsFor(byMember.get(m.id) ?? [], sports),
       status: part?.status ?? "active",
       sickFromDay: part?.sickFromDay,
     };

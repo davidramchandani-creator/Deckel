@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/server-admin";
 import { isAuthorizedCron } from "@/lib/cron/auth";
-import { computeSettlement, totalPoints, type ActivityKind, type Participant } from "@/lib/rules";
+import { computeSettlement, type Participant } from "@/lib/rules";
+import { sportsFromSnapshot, totalPointsFor } from "@/lib/sports";
 import { NextResponse, type NextRequest } from "next/server";
 import { sendPushToMembers } from "@/lib/push";
 
@@ -40,7 +41,9 @@ export async function GET(request: NextRequest) {
       bike_factor: number;
       cap_chf: number;
       currency: string;
+      sports?: Record<string, { rate: number; enabled: boolean }> | null;
     };
+    const sports = sportsFromSnapshot(snapshot);
 
     const { data: members } = await admin
       .from("members")
@@ -54,13 +57,20 @@ export async function GET(request: NextRequest) {
 
     const { data: activities } = await admin
       .from("activities")
-      .select("member_id, sport_type, distance_km")
+      .select("member_id, sport_type, distance_km, moving_time_s")
       .eq("period_id", period.id);
 
-    const byMember = new Map<string, { kind: ActivityKind; distanceKm: number }[]>();
+    const byMember = new Map<
+      string,
+      { sportKey: string; distanceKm: number; movingTimeMin: number }[]
+    >();
     for (const a of activities ?? []) {
       const list = byMember.get(a.member_id) ?? [];
-      list.push({ kind: a.sport_type as ActivityKind, distanceKm: Number(a.distance_km) });
+      list.push({
+        sportKey: a.sport_type,
+        distanceKm: Number(a.distance_km),
+        movingTimeMin: (a.moving_time_s ?? 0) / 60,
+      });
       byMember.set(a.member_id, list);
     }
 
@@ -75,7 +85,7 @@ export async function GET(request: NextRequest) {
       const participation = partByMember.get(m.id);
       return {
         memberId: m.id,
-        points: totalPoints(byMember.get(m.id) ?? [], snapshot.bike_factor),
+        points: totalPointsFor(byMember.get(m.id) ?? [], sports),
         status: participation?.status ?? "active",
         sickFromDay: participation?.sickFromDay,
       };
@@ -135,6 +145,9 @@ export async function GET(request: NextRequest) {
           bike_factor: currentSettings?.bike_factor ?? snapshot.bike_factor,
           cap_chf: currentSettings?.cap_chf ?? snapshot.cap_chf,
           currency: currentSettings?.currency ?? snapshot.currency,
+          // Rule changes -- including which sports count -- take effect here,
+          // at the period boundary, and nowhere else.
+          sports: currentSettings?.sports ?? snapshot.sports ?? null,
         },
         status: "open",
       });

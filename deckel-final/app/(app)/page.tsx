@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getMySettlementView } from "@/lib/settlement";
 import { Line, Sheet, SectionLabel, money, points } from "@/components/receipt";
 import { Explainer } from "@/components/explainer";
+import { formatAmount, sportByKey } from "@/lib/sports";
 import { InstallPrompt } from "@/components/install-prompt";
 
 export const dynamic = "force-dynamic";
@@ -56,7 +57,10 @@ export default async function RanglistePage() {
             </p>
           ) : me.isRecordHolder ? (
             <>
-              <p className="text-2xl font-medium mb-1">Du führst.</p>
+              <p className="text-2xl font-medium mb-1 flex items-center gap-3">
+                Du führst.
+                <span className="stamp stamp-in">zahlt nichts</span>
+              </p>
               <p className="text-sm text-ink-soft">
                 {points(me.points)} — mehr als alle anderen. Solange das so
                 bleibt, zahlst du nichts.
@@ -89,6 +93,28 @@ export default async function RanglistePage() {
             <p className="text-xs text-accent mt-2">
               Du bist krank gemeldet. Dein Deckel ist anteilig gekürzt.
             </p>
+          )}
+
+          {me.status !== "withdrawn" && me.catchUp && (
+            <div className="rule-dashed mt-3 pt-3">
+              <p className="text-xs text-ink-soft mb-1.5">
+                {me.catchUp.aheadIsLeader ? (
+                  <>Vor dir: nur noch <strong className="text-ink">{me.catchUp.aheadName}</strong>.</>
+                ) : (
+                  <>Direkt vor dir: <strong className="text-ink">{me.catchUp.aheadName}</strong>.</>
+                )}{" "}
+                Zum Überholen reicht eins davon:
+              </p>
+              <ul className="text-sm space-y-0.5">
+                {me.catchUp.suggestions.map((sug) => (
+                  <li key={sug.label} className="flex items-baseline">
+                    <span>{sug.label}</span>
+                    <span className="leader" aria-hidden="true" />
+                    <span className="num">{sug.amount}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
 
           <div className="rule-dashed mt-3 pt-3">
@@ -164,14 +190,21 @@ export default async function RanglistePage() {
                         row.activities.map((a) => (
                           <div key={a.id} className="flex items-baseline">
                             <span>
-                              {a.sport_type === "run" ? "Lauf" : "Velo"}
+                              {sportByKey(a.sport_type, view.sports)?.label ?? a.sport_type}
                               {a.source === "manual" && (
                                 <span className="text-ink-faint"> · von Hand</span>
                               )}
                             </span>
                             <span className="leader" aria-hidden="true" />
                             <span className="num">
-                              {Number(a.distance_km).toFixed(1)} km
+                              {formatAmount(
+                                {
+                                  sportKey: a.sport_type,
+                                  distanceKm: Number(a.distance_km),
+                                  movingTimeMin: (a.moving_time_s ?? 0) / 60,
+                                },
+                                view.sports
+                              )}
                             </span>
                           </div>
                         ))
@@ -201,7 +234,7 @@ export default async function RanglistePage() {
 
         <Explainer
           periodDays={snapshot.period_days}
-          bikeFactor={snapshot.bike_factor}
+          sports={view.sports}
           cap={snapshot.cap_chf}
           currency={currency}
         />

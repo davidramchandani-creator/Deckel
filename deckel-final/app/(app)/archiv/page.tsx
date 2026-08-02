@@ -18,10 +18,6 @@ interface SettlementWithMember {
 
 export default async function ArchivPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const active = await getActiveMembership();
   const member = active ? { group_id: active.groupId } : null;
 

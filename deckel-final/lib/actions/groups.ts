@@ -2,6 +2,21 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { ACTIVE_GROUP_COOKIE } from "@/lib/active-group";
+import { revalidatePath } from "next/cache";
+
+async function makeActive(groupId: string) {
+  const cookieStore = await cookies();
+  cookieStore.set(ACTIVE_GROUP_COOKIE, groupId, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+  });
+  revalidatePath("/", "layout");
+}
 
 export type GroupActionState = { status: "idle" | "error"; message?: string };
 
@@ -32,6 +47,8 @@ export async function createGroup(
     return { status: "error", message: error?.message ?? "Gruppe konnte nicht erstellt werden." };
   }
 
+  // A freshly created group becomes the one you are looking at.
+  await makeActive(data[0].group_id);
   redirect("/gruppe");
 }
 
@@ -55,6 +72,15 @@ export async function joinGroup(
     p_invite_code: inviteCode,
     p_display_name: displayName,
   });
+
+  if (!error) {
+    const { data: joined } = await supabase
+      .from("groups")
+      .select("id")
+      .eq("invite_code", inviteCode)
+      .maybeSingle();
+    if (joined?.id) await makeActive(joined.id);
+  }
 
   if (error) {
     return {

@@ -1,9 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import type { GroupSettings, Member, Period } from "@/lib/types";
+import { getMemberships } from "@/lib/active-group";
 import { WebhookButton } from "./webhook-button";
 import { InviteShare } from "./invite";
 import { RulesForm } from "./rules-form";
+import { GroupSwitcher } from "./group-switcher";
+import { LeaveGroup } from "./leave-group";
+import { PromoteButton } from "./promote";
 import { Sheet, SectionLabel, Line, money } from "@/components/receipt";
 import { PushToggle } from "@/components/push-toggle";
 
@@ -15,19 +19,17 @@ export default async function GruppePage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: myMembership } = await supabase
-    .from("members")
-    .select("id, group_id, role, groups(id, name, invite_code)")
-    .eq("user_id", user!.id)
-    .limit(1)
-    .maybeSingle();
+  const memberships = await getMemberships();
+  const active = memberships.find((m) => m.isActive);
 
-  if (!myMembership) {
+  if (!active) {
     return (
       <div className="space-y-4">
         <Sheet className="perforated-top">
-          <p className="text-sm text-ink-soft">
-            Du bist noch in keiner Gruppe.
+          <h1 className="text-lg font-medium mb-1">Noch keine Gruppe</h1>
+          <p className="text-sm text-ink-soft leading-relaxed">
+            Erstelle eine Gruppe und lade deine Kolleg:innen ein — oder tritt
+            mit einem Code einer bestehenden bei.
           </p>
         </Sheet>
         <div className="flex gap-2">
@@ -42,50 +44,67 @@ export default async function GruppePage() {
     );
   }
 
-  const group = Array.isArray(myMembership.groups)
-    ? myMembership.groups[0]
-    : myMembership.groups;
-  const isAdmin = myMembership.role === "admin";
-
   const [{ data: members }, { data: settings }, { data: period }] =
     await Promise.all([
       supabase
         .from("members")
         .select("*")
-        .eq("group_id", myMembership.group_id)
+        .eq("group_id", active.groupId)
         .order("created_at", { ascending: true })
         .returns<Member[]>(),
       supabase
         .from("group_settings")
         .select("*")
-        .eq("group_id", myMembership.group_id)
+        .eq("group_id", active.groupId)
         .order("valid_from", { ascending: false })
         .limit(1)
         .maybeSingle<GroupSettings>(),
       supabase
         .from("periods")
         .select("*")
-        .eq("group_id", myMembership.group_id)
+        .eq("group_id", active.groupId)
         .eq("status", "open")
         .maybeSingle<Period>(),
     ]);
 
+  const isAdmin = active.role === "admin";
+  const memberCount = members?.length ?? 0;
+  const otherAdmins =
+    members?.filter((m) => m.role === "admin" && m.user_id !== user!.id).length ?? 0;
+
   return (
     <div className="space-y-5">
       <Sheet className="perforated-top">
-        <h1 className="text-lg font-medium">{group?.name}</h1>
+        <h1 className="text-lg font-medium">{active.groupName}</h1>
         {period && (
           <p className="text-xs text-ink-soft mt-0.5">
-            Periode {period.starts_on} bis {period.ends_on}
+            Periode {new Date(period.starts_on).toLocaleDateString("de-CH")} bis{" "}
+            {new Date(period.ends_on).toLocaleDateString("de-CH")}
           </p>
         )}
         <div className="mt-4">
-          <InviteShare inviteCode={group?.invite_code ?? ""} />
+          <InviteShare inviteCode={active.inviteCode} />
         </div>
       </Sheet>
 
+      {memberships.length > 1 ? (
+        <Sheet>
+          <SectionLabel>Deine Gruppen ({memberships.length})</SectionLabel>
+          <GroupSwitcher memberships={memberships} />
+        </Sheet>
+      ) : (
+        <Sheet>
+          <SectionLabel>Weitere Gruppen</SectionLabel>
+          <p className="text-sm text-ink-soft mb-3 leading-relaxed">
+            Du kannst in mehreren Gruppen gleichzeitig mitlaufen — etwa mit dem
+            Team und mit Freunden. Jede hat eigene Regeln und einen eigenen Topf.
+          </p>
+          <GroupSwitcher memberships={memberships} />
+        </Sheet>
+      )}
+
       <Sheet>
-        <SectionLabel>Mitglieder ({members?.length ?? 0})</SectionLabel>
+        <SectionLabel>Mitglieder ({memberCount})</SectionLabel>
         <ul className="text-sm">
           {members?.map((m) => (
             <li key={m.id} className="rule-single first:border-t-0">
@@ -104,11 +123,14 @@ export default async function GruppePage() {
                   </span>
                 }
                 sub={
-                  m.strava_athlete_id ? (
-                    <span className="text-ink-faint">Strava verbunden</span>
-                  ) : (
-                    <span className="text-ink-faint">ohne Strava</span>
-                  )
+                  <span className="flex items-center gap-2">
+                    <span className="text-ink-faint">
+                      {m.strava_athlete_id ? "Strava verbunden" : "ohne Strava"}
+                    </span>
+                    {isAdmin && m.role !== "admin" && (
+                      <PromoteButton memberId={m.id} />
+                    )}
+                  </span>
                 }
               />
             </li>
@@ -121,7 +143,7 @@ export default async function GruppePage() {
           <SectionLabel>Regeln</SectionLabel>
           {isAdmin ? (
             <RulesForm
-              groupId={myMembership.group_id}
+              groupId={active.groupId}
               periodDays={settings.period_days}
               bikeFactor={Number(settings.bike_factor)}
               capChf={Number(settings.cap_chf)}
@@ -165,6 +187,21 @@ export default async function GruppePage() {
           <WebhookButton />
         </Sheet>
       )}
+
+      <Sheet>
+        <SectionLabel>Gruppe verlassen</SectionLabel>
+        <LeaveGroup
+          groupId={active.groupId}
+          groupName={active.groupName}
+          isLastMember={memberCount <= 1}
+        />
+        {isAdmin && otherAdmins === 0 && memberCount > 1 && (
+          <p className="text-xs text-ink-soft mt-2 leading-relaxed">
+            Du bist der einzige Admin. Mach zuerst jemand anderen zum Admin,
+            sonst bleibt die Gruppe ohne Verwaltung zurück.
+          </p>
+        )}
+      </Sheet>
     </div>
   );
 }

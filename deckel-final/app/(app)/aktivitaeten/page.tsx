@@ -1,8 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Activity, Participation, Period } from "@/lib/types";
+import { getActiveMembership } from "@/lib/active-group";
 import { StatusSwitch } from "./status-switch";
-import { ManualEntryForm } from "./manual-entry-form";
-import { DeleteActivity } from "./delete-activity";
 import { Sheet, SectionLabel, Line, points } from "@/components/receipt";
 import { totalPoints, type ActivityKind } from "@/lib/rules";
 
@@ -15,18 +14,9 @@ export default async function MeineAktivitaetenPage({
 }) {
   const params = await searchParams;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  const { data: member } = await supabase
-    .from("members")
-    .select("id, group_id, strava_athlete_id")
-    .eq("user_id", user!.id)
-    .limit(1)
-    .maybeSingle();
-
-  if (!member) {
+  const active = await getActiveMembership();
+  if (!active) {
     return (
       <Sheet className="perforated-top">
         <p className="text-sm text-ink-soft">Du bist noch in keiner Gruppe.</p>
@@ -34,16 +24,22 @@ export default async function MeineAktivitaetenPage({
     );
   }
 
+  const { data: member } = await supabase
+    .from("members")
+    .select("id, group_id, strava_athlete_id")
+    .eq("id", active.memberId)
+    .maybeSingle();
+
   const { data: period } = await supabase
     .from("periods")
     .select("*")
-    .eq("group_id", member.group_id)
+    .eq("group_id", active.groupId)
     .eq("status", "open")
     .order("starts_on", { ascending: false })
     .limit(1)
     .maybeSingle<Period>();
 
-  if (!period) {
+  if (!member || !period) {
     return (
       <Sheet className="perforated-top">
         <p className="text-sm text-ink-soft">Gerade läuft keine Periode.</p>
@@ -89,7 +85,7 @@ export default async function MeineAktivitaetenPage({
   return (
     <div className="space-y-5">
       {params.strava === "connected" && (
-        <Sheet className="border-accent-soft">
+        <Sheet>
           <p className="text-sm">
             Strava ist verbunden. Neue Läufe erscheinen ab jetzt automatisch.
           </p>
@@ -98,14 +94,14 @@ export default async function MeineAktivitaetenPage({
       {params.strava === "denied" && (
         <Sheet>
           <p className="text-sm text-accent">
-            Du hast den Zugriff abgelehnt. Ohne Strava kannst du km von Hand
-            eintragen.
+            Du hast den Zugriff abgelehnt. Ohne Strava zählen deine Kilometer
+            nicht mit.
           </p>
         </Sheet>
       )}
 
       <Sheet className="perforated-top">
-        <SectionLabel>Deine Bilanz</SectionLabel>
+        <SectionLabel>Deine Bilanz · {active.groupName}</SectionLabel>
         <Line emphasis left="Punkte" right={points(myPoints)} />
         <Line left="Laufen" right={`${runKm.toFixed(1)} km`} />
         <Line left="Velo" right={`${bikeKm.toFixed(1)} km`} />
@@ -123,14 +119,17 @@ export default async function MeineAktivitaetenPage({
       <Sheet>
         <SectionLabel>Strava</SectionLabel>
         {member.strava_athlete_id ? (
-          <p className="text-sm text-ink-soft">
+          <p className="text-sm text-ink-soft leading-relaxed">
             Verbunden. Läufe und Fahrten erscheinen automatisch, meist innert
-            Minuten.
+            Minuten. Löschst du eine Aktivität in Strava, verschwindet sie auch
+            hier.
           </p>
         ) : (
           <div className="space-y-2">
-            <p className="text-sm text-ink-soft">
-              Verbinde Strava, dann musst du nichts mehr von Hand eintragen.
+            <p className="text-sm text-ink-soft leading-relaxed">
+              Ohne Strava zählen deine Kilometer nicht. Alle Aktivitäten kommen
+              direkt von dort — von Hand eintragen ist bewusst nicht möglich,
+              damit die Rangliste für alle auf derselben Grundlage steht.
             </p>
             <a href="/api/strava/authorize" className="btn btn-primary w-full">
               Mit Strava verbinden
@@ -140,44 +139,26 @@ export default async function MeineAktivitaetenPage({
       </Sheet>
 
       <Sheet>
-        <SectionLabel>Von Hand eintragen</SectionLabel>
-        <ManualEntryForm
-          periodId={period.id}
-          bikeFactor={snapshot.bike_factor}
-          periodStart={period.starts_on}
-        />
-      </Sheet>
-
-      <Sheet>
         <SectionLabel>Diese Periode</SectionLabel>
         {!activities || activities.length === 0 ? (
-          <p className="text-sm text-ink-soft">
-            Noch nichts eingetragen. Verbinde Strava oder trag deine km von Hand
-            ein.
+          <p className="text-sm text-ink-soft leading-relaxed">
+            Noch nichts eingetragen. Sobald du mit Strava läufst oder Velo
+            fährst, erscheint es hier automatisch.
           </p>
         ) : (
           <ul className="text-sm">
             {activities.map((a) => (
               <li key={a.id} className="rule-single first:border-t-0">
                 <Line
-                  left={
-                    <span>
-                      {a.sport_type === "run" ? "Lauf" : "Velo"}
-                      {a.source === "manual" && (
-                        <span className="text-ink-faint text-xs"> · von Hand</span>
-                      )}
-                    </span>
-                  }
+                  left={a.sport_type === "run" ? "Lauf" : "Velo"}
                   right={`${Number(a.distance_km).toFixed(1)} km`}
                   sub={
-                    <span className="flex items-center gap-2">
-                      <span className="text-ink-faint">
-                        {new Date(a.started_at).toLocaleDateString("de-CH", {
-                          day: "2-digit",
-                          month: "2-digit",
-                        })}
-                      </span>
-                      {a.source === "manual" && <DeleteActivity activityId={a.id} />}
+                    <span className="text-ink-faint">
+                      {new Date(a.started_at).toLocaleDateString("de-CH", {
+                        day: "2-digit",
+                        month: "2-digit",
+                      })}
+                      {a.source === "manual" && " · Altbestand, von Hand"}
                     </span>
                   }
                 />

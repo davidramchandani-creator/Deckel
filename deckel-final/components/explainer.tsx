@@ -48,7 +48,8 @@ export function Explainer({
             <p>
               1 km Laufen ergibt 1.0 Punkt. 1 km Velo ergibt{" "}
               {bikeFactor.toFixed(2)} Punkte. Schwimmen, Spazieren und alles
-              andere zählt nicht.
+              andere zählt nicht. Alle Kilometer kommen direkt aus Strava —
+              von Hand eintragen geht nicht, damit für alle dasselbe gilt.
             </p>
           </div>
 

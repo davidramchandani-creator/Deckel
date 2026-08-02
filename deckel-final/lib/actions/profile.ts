@@ -45,15 +45,3 @@ export async function updateGroupRules(
   revalidatePath("/");
   return { status: "idle" };
 }
-
-export async function deleteManualActivity(activityId: string): Promise<ProfileState> {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("delete_manual_activity", {
-    p_activity_id: activityId,
-  });
-  if (error) return { status: "error", message: error.message };
-
-  revalidatePath("/");
-  revalidatePath("/aktivitaeten");
-  return { status: "idle" };
-}

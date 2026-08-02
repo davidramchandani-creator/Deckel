@@ -7,6 +7,7 @@ import {
   type Participant,
 } from "@/lib/rules";
 import type { Activity, Member, Period } from "@/lib/types";
+import { getActiveMembership } from "@/lib/active-group";
 
 export interface SettlementRow {
   memberId: string;
@@ -64,15 +65,12 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data: membership } = await supabase
-    .from("members")
-    .select("id, group_id, role, groups(id, name, invite_code)")
-    .eq("user_id", user.id)
-    .limit(1)
-    .maybeSingle();
-  if (!membership) return null;
+  // Which group the app is currently showing -- a member may belong to
+  // several, and the choice is remembered per user.
+  const active = await getActiveMembership();
+  if (!active) return null;
 
-  const group = Array.isArray(membership.groups) ? membership.groups[0] : membership.groups;
+  const membership = { id: active.memberId, group_id: active.groupId };
 
   const { data: period } = await supabase
     .from("periods")
@@ -176,9 +174,9 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
 
   return {
     groupId: membership.group_id,
-    groupName: group?.name ?? "",
-    isAdmin: membership.role === "admin",
-    inviteCode: (group as { invite_code?: string } | null)?.invite_code ?? "",
+    groupName: active.groupName,
+    isAdmin: active.role === "admin",
+    inviteCode: active.inviteCode,
     me,
     period,
     daysRemaining: Math.max(0, periodDays - day),

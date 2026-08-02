@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PaidToggle } from "./paid-toggle";
 import { Sheet, SectionLabel, Line, money, points } from "@/components/receipt";
 import type { Period } from "@/lib/types";
+import { getActiveMembership } from "@/lib/active-group";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +22,8 @@ export default async function ArchivPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: member } = await supabase
-    .from("members")
-    .select("group_id")
-    .eq("user_id", user!.id)
-    .limit(1)
-    .maybeSingle();
+  const active = await getActiveMembership();
+  const member = active ? { group_id: active.groupId } : null;
 
   if (!member) {
     return (

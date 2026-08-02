@@ -68,10 +68,12 @@ export function Explainer({
           <div>
             <p className="text-ink font-medium mb-1">Was du zahlst</p>
             <p>
-              Massgebend ist der Abstand zur besten Person. Liegst du 5 Punkte
-              zurück, zahlst du {currency} 5.00. Wer vorne liegt, zahlt nichts.
-              Mehr als {currency} {cap.toFixed(2)} zahlt aber niemand, egal wie
-              gross der Rückstand ist.
+              Massgebend ist dein Rückstand auf die beste Person — im
+              Verhältnis. Wer vorne liegt, zahlt nichts. Wer gar nichts macht,
+              zahlt den vollen Deckel von {currency} {cap.toFixed(2)}. Alle
+              dazwischen zahlen anteilig: bei halbem Rückstand den halben
+              Deckel. Darum lohnt sich jeder Punkt — immer, egal wie weit
+              hinten du liegst.
             </p>
           </div>
 

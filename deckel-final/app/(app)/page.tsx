@@ -4,6 +4,7 @@ import { Line, Sheet, SectionLabel, money, points } from "@/components/receipt";
 import { Explainer } from "@/components/explainer";
 import { formatAmount, sportByKey } from "@/lib/sports";
 import { InstallPrompt } from "@/components/install-prompt";
+import { CountUp } from "@/components/count-up";
 
 export const dynamic = "force-dynamic";
 
@@ -44,11 +45,29 @@ export default async function RanglistePage() {
       {/* Personal standing — the answer to "how am I doing and what does it cost me". */}
       {me && (
         <Sheet className="perforated-top">
-          <div className="flex items-baseline justify-between mb-3">
+          <div className="flex items-baseline justify-between mb-2">
             <span className="label">Dein Stand</span>
             <span className="text-xs text-ink-soft">
               Tag {view.currentDay} von {snapshot.period_days}
             </span>
+          </div>
+
+          {/* One notch per day, spent days inked, today in red -- the
+              period as a strip being used up. */}
+          <div className="day-strip mb-3" aria-hidden="true">
+            {Array.from({ length: snapshot.period_days }).map((_, i) => (
+              <span
+                key={i}
+                className={
+                  i + 1 === view.currentDay
+                    ? "spent today"
+                    : i + 1 < view.currentDay
+                      ? "spent"
+                      : ""
+                }
+                style={{ "--i": i } as React.CSSProperties}
+              />
+            ))}
           </div>
 
           {me.status === "withdrawn" ? (
@@ -68,21 +87,19 @@ export default async function RanglistePage() {
             </>
           ) : (
             <>
-              <p className="text-2xl font-medium mb-1 num">
-                {money(me.owed, currency)}
+              <p className="text-2xl font-medium mb-1">
+                <CountUp value={me.owed} prefix={`${currency} `} />
               </p>
               <p className="text-sm text-ink-soft leading-relaxed">
                 So viel kostet dich dein Rückstand gerade. Du liegst{" "}
                 <span className="num">{me.behind.toFixed(1)}</span> Punkte hinter
                 der Spitze, auf Platz {me.rank} von {me.of}.
-                {me.capReached && (
-                  <> Der Deckel ist erreicht — mehr wird es nicht.</>
-                )}
-                {!me.capReached && me.behind > 0 && (
+                {view.record > 0 && me.behind > 0 && (
                   <>
                     {" "}
-                    Jeder weitere Kilometer Laufen senkt den Betrag um{" "}
-                    {currency} 1.00.
+                    Jeder Punkt spart dir gerade {currency}{" "}
+                    {(snapshot.cap_chf / view.record).toFixed(2)} — egal wie
+                    weit du zurückliegst.
                   </>
                 )}
               </p>
@@ -140,7 +157,7 @@ export default async function RanglistePage() {
           </p>
         ) : (
           <ul className="text-sm">
-            {view.rows.map((row) => {
+            {view.rows.map((row, idx) => {
               const isMe = me?.memberId === row.memberId;
               return (
                 <li
@@ -154,7 +171,7 @@ export default async function RanglistePage() {
                         left={
                           <span>
                             {row.isRecordHolder && (
-                              <span title="Führt" aria-label="Führt">
+                              <span className="star-pop" title="Führt" aria-label="Führt">
                                 ★{" "}
                               </span>
                             )}
@@ -176,8 +193,23 @@ export default async function RanglistePage() {
                           </span>
                         }
                         sub={
-                          <span className="num text-ink-faint">
-                            {points(row.points)}
+                          <span className="block">
+                            <span className="num text-ink-faint">
+                              {points(row.points)}
+                            </span>
+                            {view.record > 0 && row.status !== "withdrawn" && (
+                              <span className="score-track block" aria-hidden="true">
+                                <span
+                                  className={`score-fill block ${isMe ? "is-me" : ""}`}
+                                  style={
+                                    {
+                                      "--w": `${Math.max(2, (row.points / view.record) * 100)}%`,
+                                      "--i": idx,
+                                    } as React.CSSProperties
+                                  }
+                                />
+                              </span>
+                            )}
                           </span>
                         }
                       />
@@ -217,11 +249,11 @@ export default async function RanglistePage() {
           </ul>
         )}
 
-        <div className="rule-double mt-3 pt-2">
+        <div className="rule-draw mt-3 pt-2">
           <Line
             emphasis
             left="Topf"
-            right={money(view.pot, currency)}
+            right={<CountUp value={view.pot} prefix={`${currency} `} />}
             sub={
               view.pot > 0 ? (
                 <>ca. {money(view.perHead, currency)} pro Kopf fürs Essen</>

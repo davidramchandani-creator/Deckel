@@ -124,7 +124,9 @@ export function BottomNav() {
                   transition-all duration-150 ease-out active:scale-[0.93]
                   ${active || isPending ? "text-ink" : "text-ink-faint hover:text-ink-soft"}`}
               >
-                <Icon name={item.href} active={active || isPending} />
+                <span className={active || isPending ? "icon-pop" : ""}>
+                  <Icon name={item.href} active={active || isPending} />
+                </span>
                 <span
                   className={`text-[11px] leading-none transition-all duration-150 ${
                     active || isPending ? "font-medium" : ""

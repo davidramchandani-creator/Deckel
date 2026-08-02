@@ -141,8 +141,19 @@ export function computeSettlement(
 
   const lines: SettlementLine[] = participants.map((p) => {
     const capApplied = capForParticipant(p, baseCap, periodDays);
+    /*
+     * Proportional settlement: schuld = deckel x (rueckstand / rekord).
+     *
+     * The old rule min(cap, deficit) had a dead zone -- once more than
+     * `cap` points behind, further effort changed nothing, so exactly the
+     * people who most needed a reason to move had none. Now zero points
+     * costs the full cap, leading costs nothing, and every point in
+     * between is worth cap/record francs to everyone, all period long.
+     */
     const owedRaw =
-      p.status === "withdrawn" ? 0 : Math.min(capApplied, Math.max(0, record - p.points));
+      p.status === "withdrawn" || record <= 0
+        ? 0
+        : capApplied * (Math.max(0, record - p.points) / record);
     return {
       memberId: p.memberId,
       points: p.points,

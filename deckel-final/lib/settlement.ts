@@ -40,8 +40,6 @@ export interface MyStanding {
   rank: number;
   /** How many are being ranked. */
   of: number;
-  /** True once the cap is reached -- further losses cost nothing more. */
-  capReached: boolean;
 }
 
 export interface GroupSettlementView {
@@ -213,7 +211,6 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
         behind: Math.max(0, result.record - myRow.points),
         rank: ranked.findIndex((r) => r.memberId === myRow.memberId) + 1,
         of: ranked.length,
-        capReached: myRow.owed > 0 && myRow.owed >= myRow.capApplied,
       }
     : null;
 

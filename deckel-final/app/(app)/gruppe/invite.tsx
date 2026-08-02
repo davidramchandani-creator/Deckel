@@ -15,7 +15,11 @@ export function InviteShare({ inviteCode }: { inviteCode: string }) {
       ? `${window.location.origin}/gruppe/beitreten?code=${inviteCode}`
       : "";
 
-  const message = `Mach mit bei Pace or Pay — unsere Lauf-Challenge. Mit diesem Link kommst du rein: ${link}`;
+  const message =
+    `Mach mit bei Pace or Pay — unsere Lauf-Challenge.\n\n` +
+    `${link}\n\n` +
+    `Tipp: Link in Safari öffnen, dann Teilen → Zum Home-Bildschirm. ` +
+    `Dann hast du es als App.`;
 
   async function share() {
     if (navigator.share) {

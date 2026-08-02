@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getMySettlementView } from "@/lib/settlement";
 import { Line, Sheet, SectionLabel, money, points } from "@/components/receipt";
 import { Explainer } from "@/components/explainer";
+import { InstallPrompt } from "@/components/install-prompt";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,8 @@ export default async function RanglistePage() {
 
   return (
     <div className="space-y-5">
+      <InstallPrompt />
+
       {/* Personal standing — the answer to "how am I doing and what does it cost me". */}
       {me && (
         <Sheet className="perforated-top">

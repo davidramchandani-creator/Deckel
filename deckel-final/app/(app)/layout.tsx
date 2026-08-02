@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { signOut } from "@/lib/actions/auth";
 import { BottomNav } from "@/components/nav";
 import { PageTitle } from "@/components/header";
+import { PullToRefresh } from "@/components/pull-to-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -47,8 +48,10 @@ export default async function AppLayout({
         </form>
       </header>
 
-      <main key="content" className="flex-1 px-4 py-4 pb-6 page-enter">
-        {children}
+      <main key="content" className="flex-1 px-4 py-4 pb-6">
+        <PullToRefresh>
+          <div className="page-enter">{children}</div>
+        </PullToRefresh>
       </main>
 
       <BottomNav />

@@ -40,6 +40,9 @@
 html {
   background: var(--paper);
   -webkit-text-size-adjust: 100%;
+  /* Stops iOS rubber-banding the whole page, which otherwise fights the
+     pull-to-refresh gesture and lets the paper background slide away. */
+  overscroll-behavior-y: contain;
 }
 
 body {

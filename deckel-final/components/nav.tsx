@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
 /**
  * Bottom navigation.
@@ -79,6 +80,18 @@ function Icon({ name, active }: { name: string; active: boolean }) {
 export function BottomNav() {
   const pathname = usePathname();
 
+  /*
+   * Server-rendered pages can take a moment. Without feedback a tap looks
+   * like nothing happened, so the tapped item is marked immediately and
+   * stays marked until the route actually changes. This is optimistic on
+   * purpose -- the visual response must not wait on the network.
+   */
+  const [pending, setPending] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPending(null);
+  }, [pathname]);
+
   return (
     <nav
       aria-label="Hauptnavigation"
@@ -90,6 +103,7 @@ export function BottomNav() {
           const active = item.exact
             ? pathname === item.href
             : pathname.startsWith(item.href);
+          const isPending = pending === item.href && !active;
 
           return (
             <li key={item.href} className="relative">
@@ -98,20 +112,22 @@ export function BottomNav() {
               <span
                 aria-hidden="true"
                 className={`absolute left-1/2 -translate-x-1/2 top-0 h-[2px] bg-ink rounded-full transition-all duration-200 ease-out ${
-                  active ? "w-8 opacity-100" : "w-0 opacity-0"
-                }`}
+                  active || isPending ? "w-8 opacity-100" : "w-0 opacity-0"
+                } ${isPending ? "animate-pulse" : ""}`}
               />
               <Link
                 href={item.href}
+                prefetch
+                onClick={() => setPending(item.href)}
                 aria-current={active ? "page" : undefined}
                 className={`flex flex-col items-center justify-center gap-1 min-h-[58px] px-1 pt-2.5 pb-2
                   transition-all duration-150 ease-out active:scale-[0.93]
-                  ${active ? "text-ink" : "text-ink-faint hover:text-ink-soft"}`}
+                  ${active || isPending ? "text-ink" : "text-ink-faint hover:text-ink-soft"}`}
               >
-                <Icon name={item.href} active={active} />
+                <Icon name={item.href} active={active || isPending} />
                 <span
                   className={`text-[11px] leading-none transition-all duration-150 ${
-                    active ? "font-medium" : ""
+                    active || isPending ? "font-medium" : ""
                   }`}
                 >
                   {item.label}

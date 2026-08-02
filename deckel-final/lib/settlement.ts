@@ -85,20 +85,15 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
 
   if (!period) return null;
 
-  const { data: members } = await supabase
-    .from("members")
-    .select("*")
-    .eq("group_id", membership.group_id);
-
-  const { data: participations } = await supabase
-    .from("participations")
-    .select("*")
-    .eq("period_id", period.id);
-
-  const { data: activities } = await supabase
-    .from("activities")
-    .select("*")
-    .eq("period_id", period.id);
+  // These three are independent of each other -- issuing them sequentially
+  // meant three full round trips stacked on top of the two above, which is
+  // what made tapping a tab feel unresponsive.
+  const [{ data: members }, { data: participations }, { data: activities }] =
+    await Promise.all([
+      supabase.from("members").select("*").eq("group_id", membership.group_id),
+      supabase.from("participations").select("*").eq("period_id", period.id),
+      supabase.from("activities").select("*").eq("period_id", period.id),
+    ]);
 
   const bikeFactor = period.settings_snapshot.bike_factor;
   const capChf = period.settings_snapshot.cap_chf;

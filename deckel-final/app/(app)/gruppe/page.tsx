@@ -47,27 +47,28 @@ export default async function GruppePage() {
     : myMembership.groups;
   const isAdmin = myMembership.role === "admin";
 
-  const { data: members } = await supabase
-    .from("members")
-    .select("*")
-    .eq("group_id", myMembership.group_id)
-    .order("created_at", { ascending: true })
-    .returns<Member[]>();
-
-  const { data: settings } = await supabase
-    .from("group_settings")
-    .select("*")
-    .eq("group_id", myMembership.group_id)
-    .order("valid_from", { ascending: false })
-    .limit(1)
-    .maybeSingle<GroupSettings>();
-
-  const { data: period } = await supabase
-    .from("periods")
-    .select("*")
-    .eq("group_id", myMembership.group_id)
-    .eq("status", "open")
-    .maybeSingle<Period>();
+  const [{ data: members }, { data: settings }, { data: period }] =
+    await Promise.all([
+      supabase
+        .from("members")
+        .select("*")
+        .eq("group_id", myMembership.group_id)
+        .order("created_at", { ascending: true })
+        .returns<Member[]>(),
+      supabase
+        .from("group_settings")
+        .select("*")
+        .eq("group_id", myMembership.group_id)
+        .order("valid_from", { ascending: false })
+        .limit(1)
+        .maybeSingle<GroupSettings>(),
+      supabase
+        .from("periods")
+        .select("*")
+        .eq("group_id", myMembership.group_id)
+        .eq("status", "open")
+        .maybeSingle<Period>(),
+    ]);
 
   return (
     <div className="space-y-5">

@@ -51,20 +51,21 @@ export default async function MeineAktivitaetenPage({
     );
   }
 
-  const { data: participation } = await supabase
-    .from("participations")
-    .select("*")
-    .eq("period_id", period.id)
-    .eq("member_id", member.id)
-    .maybeSingle<Participation>();
-
-  const { data: activities } = await supabase
-    .from("activities")
-    .select("*")
-    .eq("period_id", period.id)
-    .eq("member_id", member.id)
-    .order("started_at", { ascending: false })
-    .returns<Activity[]>();
+  const [{ data: participation }, { data: activities }] = await Promise.all([
+    supabase
+      .from("participations")
+      .select("*")
+      .eq("period_id", period.id)
+      .eq("member_id", member.id)
+      .maybeSingle<Participation>(),
+    supabase
+      .from("activities")
+      .select("*")
+      .eq("period_id", period.id)
+      .eq("member_id", member.id)
+      .order("started_at", { ascending: false })
+      .returns<Activity[]>(),
+  ]);
 
   const status = participation?.status ?? "active";
   const snapshot = period.settings_snapshot;

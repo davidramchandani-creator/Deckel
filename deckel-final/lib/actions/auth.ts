@@ -61,8 +61,15 @@ export async function verifyEmailCode(
   if (!email) {
     return { status: "error", message: "E-Mail-Adresse fehlt. Fordere den Code neu an." };
   }
-  if (token.length !== 6) {
-    return { status: "sent", email, message: "Der Code besteht aus 6 Ziffern." };
+  // Supabase's OTP length is a project setting (6-10 digits). This project
+  // issues 8. Hardcoding 6 silently truncated the code and sent the wrong
+  // number -- so accept the whole documented range instead.
+  if (token.length < 6 || token.length > 10) {
+    return {
+      status: "sent",
+      email,
+      message: "Der Code besteht aus 6 bis 10 Ziffern. Tipp ihn vollständig ab.",
+    };
   }
 
   const otp = createOtpClient();

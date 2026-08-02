@@ -46,11 +46,11 @@ export default function LoginPage() {
                   inputMode="numeric"
                   autoComplete="one-time-code"
                   pattern="[0-9]*"
-                  maxLength={6}
+                  maxLength={10}
                   required
                   autoFocus
-                  placeholder="123456"
-                  className="field mt-1 num text-center tracking-[0.4em]"
+                  placeholder="12345678"
+                  className="field mt-1 num text-center tracking-[0.25em]"
                 />
               </label>
 

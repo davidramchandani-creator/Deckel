@@ -27,9 +27,14 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
-  const next = searchParams.get("next") ?? "/";
+  const cookieStoreForInvite = await cookies();
+  const inviteCode = cookieStoreForInvite.get("pop-invite")?.value;
+  const next = inviteCode
+    ? `/gruppe/beitreten?code=${encodeURIComponent(inviteCode)}`
+    : (searchParams.get("next") ?? "/");
 
   const successRedirect = NextResponse.redirect(new URL(next, origin));
+  if (inviteCode) successRedirect.cookies.delete("pop-invite");
 
   const cookieStore = await cookies();
   const supabase = createServerClient(

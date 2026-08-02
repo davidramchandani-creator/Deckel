@@ -59,13 +59,16 @@ export async function GET(request: NextRequest) {
       refresh_token: tokens.refresh_token,
       expires_at: new Date(tokens.expires_at * 1000).toISOString(),
       scope: tokens.scope ?? scope,
+      revoked_at: null, // a fresh grant heals a previously dead connection
     });
 
     if (tokens.athlete?.id) {
+      // Stamp the athlete on EVERY membership of this user, so one connect
+      // scores in all their groups.
       await admin
         .from("members")
         .update({ strava_athlete_id: tokens.athlete.id })
-        .eq("id", member.id);
+        .eq("user_id", user.id);
     }
 
     return NextResponse.redirect(`${appUrl}/aktivitaeten?strava=connected`);

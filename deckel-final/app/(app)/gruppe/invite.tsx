@@ -12,7 +12,7 @@ export function InviteShare({ inviteCode }: { inviteCode: string }) {
 
   const link =
     typeof window !== "undefined"
-      ? `${window.location.origin}/gruppe/beitreten?code=${inviteCode}`
+      ? `${window.location.origin}/einladung?code=${inviteCode}`
       : "";
 
   const message =

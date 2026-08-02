@@ -3,6 +3,8 @@ import { PaidToggle } from "./paid-toggle";
 import { Sheet, SectionLabel, Line, money, points } from "@/components/receipt";
 import type { Period } from "@/lib/types";
 import { getActiveMembership } from "@/lib/active-group";
+import { ShareResult } from "./share-result";
+import { CopyAmount } from "./copy-amount";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +22,17 @@ export default async function ArchivPage() {
   const supabase = await createClient();
   const active = await getActiveMembership();
   const member = active ? { group_id: active.groupId } : null;
+
+  const { data: adminRow } = active
+    ? await supabase
+        .from("members")
+        .select("display_name")
+        .eq("group_id", active.groupId)
+        .eq("role", "admin")
+        .order("created_at")
+        .limit(1)
+        .maybeSingle()
+    : { data: null };
 
   if (!member) {
     return (
@@ -68,8 +81,19 @@ export default async function ArchivPage() {
         const pot = rows.reduce((sum, r) => sum + Number(r.owed_chf), 0);
         const currency = period.settings_snapshot.currency;
 
+        const winner = rows.length > 0 ? rows[0] : null;
+        const winnerRel = winner
+          ? Array.isArray(winner.members)
+            ? winner.members[0]
+            : winner.members
+          : null;
+        const isNewest = period.id === periods[0].id;
+
         return (
-          <Sheet key={period.id} className="perforated-top">
+          <Sheet
+            key={period.id}
+            className={`perforated-top ${isNewest ? "tear-in" : ""}`}
+          >
             <SectionLabel>
               {new Date(period.starts_on).toLocaleDateString("de-CH")} bis{" "}
               {new Date(period.ends_on).toLocaleDateString("de-CH")}
@@ -81,7 +105,14 @@ export default async function ArchivPage() {
                 return (
                   <li key={row.id} className="rule-single first:border-t-0">
                     <Line
-                      left={memberRel?.display_name ?? "?"}
+                      left={
+                        <span>
+                          {memberRel?.display_name ?? "?"}
+                          {winner?.id === row.id && (
+                            <span className="stamp stamp-in ml-2">Gewonnen</span>
+                          )}
+                        </span>
+                      }
                       right={
                         <span className={owed > 0 ? "text-accent" : "text-ink-faint"}>
                           {owed > 0 ? money(owed, currency) : "—"}
@@ -93,7 +124,17 @@ export default async function ArchivPage() {
                             {points(Number(row.points))}
                           </span>
                           {owed > 0 && (
-                            <PaidToggle settlementId={row.id} initialPaid={row.paid} />
+                            <>
+                              <PaidToggle settlementId={row.id} initialPaid={row.paid} />
+                              {!row.paid && row.member_id === active?.memberId && (
+                                <CopyAmount
+                                  amount={owed}
+                                  currency={currency}
+                                  adminName={adminRow?.display_name ?? null}
+                                  groupName={active?.groupName ?? ""}
+                                />
+                              )}
+                            </>
                           )}
                         </span>
                       }
@@ -102,8 +143,22 @@ export default async function ArchivPage() {
                 );
               })}
             </ul>
-            <div className="rule-double mt-3 pt-2">
+            <div className="rule-draw mt-3 pt-2">
               <Line emphasis left="Topf" right={money(pot, currency)} />
+            </div>
+            <div className="mt-3">
+              <ShareResult
+                groupName={active?.groupName ?? ""}
+                from={new Date(period.starts_on).toLocaleDateString("de-CH")}
+                to={new Date(period.ends_on).toLocaleDateString("de-CH")}
+                pot={pot}
+                currency={currency}
+                winnerName={winnerRel?.display_name ?? null}
+                lines={rows.map((r) => {
+                  const rel = Array.isArray(r.members) ? r.members[0] : r.members;
+                  return { name: rel?.display_name ?? "?", owed: Number(r.owed_chf) };
+                })}
+              />
             </div>
           </Sheet>
         );

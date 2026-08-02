@@ -115,6 +115,16 @@ export async function getValidAccessToken(
   });
 
   if (!res.ok) {
+    // 400/401 from the token endpoint means the refresh token itself was
+    // rejected -- password change, access revoked in Strava, app deleted.
+    // That is permanent until the user reconnects, so record it; the UI
+    // turns this into a "reconnect" banner instead of silent zero points.
+    if (res.status === 400 || res.status === 401) {
+      await admin
+        .from("strava_tokens")
+        .update({ revoked_at: new Date().toISOString() })
+        .eq("member_id", memberId);
+    }
     throw new Error(`Strava token refresh failed: ${res.status} ${await res.text()}`);
   }
 
@@ -206,4 +216,28 @@ export function toActivityRow(
     source: "strava" as const,
     raw: activity as unknown as Record<string, unknown>,
   };
+}
+
+
+/**
+ * Finds a usable token holder for an athlete, regardless of which of the
+ * user's memberships the token was stored under. With multi-group play a
+ * user connects Strava once, but each group has its own member row.
+ */
+export async function tokenMemberForAthlete(
+  admin: SupabaseClient,
+  athleteId: number
+): Promise<string | null> {
+  const { data } = await admin
+    .from("members")
+    .select("id, strava_tokens!inner(member_id, revoked_at)")
+    .eq("strava_athlete_id", athleteId);
+
+  if (!data) return null;
+  const rows = data as unknown as {
+    id: string;
+    strava_tokens: { revoked_at: string | null };
+  }[];
+  const alive = rows.find((r) => r.strava_tokens.revoked_at === null);
+  return alive?.id ?? null;
 }

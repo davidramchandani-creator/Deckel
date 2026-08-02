@@ -24,11 +24,14 @@ export default async function MeineAktivitaetenPage({
     );
   }
 
-  const { data: member } = await supabase
-    .from("members")
-    .select("id, group_id, strava_athlete_id")
-    .eq("id", active.memberId)
-    .maybeSingle();
+  const [{ data: member }, { data: stravaStatus }] = await Promise.all([
+    supabase
+      .from("members")
+      .select("id, group_id, strava_athlete_id")
+      .eq("id", active.memberId)
+      .maybeSingle(),
+    supabase.rpc("my_strava_status"),
+  ]);
 
   const { data: period } = await supabase
     .from("periods")
@@ -126,6 +129,21 @@ export default async function MeineAktivitaetenPage({
           periodStarted={periodStarted}
         />
       </Sheet>
+
+      {stravaStatus === "revoked" && (
+        <Sheet className="border-accent-soft">
+          <SectionLabel>Strava-Verbindung unterbrochen</SectionLabel>
+          <p className="text-sm text-ink-soft mb-2 leading-relaxed">
+            Strava akzeptiert den Zugriff nicht mehr — das passiert nach einer
+            Passwortänderung oder wenn der Zugriff in Strava widerrufen wurde.
+            Seither zählen deine Aktivitäten nicht. Einmal neu verbinden
+            genügt.
+          </p>
+          <a href="/api/strava/authorize" className="btn btn-primary w-full">
+            Neu verbinden
+          </a>
+        </Sheet>
+      )}
 
       <Sheet>
         <SectionLabel>Strava</SectionLabel>

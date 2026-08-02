@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { computeSettlement, currentPeriodDay, type Participant } from "@/lib/rules";
-import { sportsFromSnapshot, totalPointsFor, type SportDef } from "@/lib/sports";
+import { sportsFromSnapshot, totalPointsFor, pointsForScorable, sportByKey, formatAmount, type SportDef } from "@/lib/sports";
 import type { Activity, Member, Period } from "@/lib/types";
 import { getActiveMembership } from "@/lib/active-group";
 
@@ -42,7 +42,20 @@ export interface MyStanding {
   of: number;
 }
 
+export interface FeedItem {
+  displayName: string;
+  sportLabel: string;
+  amount: string;
+  points: number;
+  daysAgo: number;
+  isMe: boolean;
+}
+
 export interface GroupSettlementView {
+  /** Latest activities across the whole group, newest first. */
+  feed: FeedItem[];
+  /** A period settled within the last 3 days -- worth celebrating. */
+  freshlySettled: { endedOn: string } | null;
   sports: SportDef[];
   groupId: string;
   groupName: string;
@@ -78,16 +91,28 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
 
   const membership = { id: active.memberId, group_id: active.groupId };
 
-  const { data: period } = await supabase
-    .from("periods")
-    .select("*")
-    .eq("group_id", membership.group_id)
-    .eq("status", "open")
-    .order("starts_on", { ascending: false })
-    .limit(1)
-    .maybeSingle<Period>();
+  const [{ data: period }, { data: justSettled }] = await Promise.all([
+    supabase
+      .from("periods")
+      .select("*")
+      .eq("group_id", membership.group_id)
+      .eq("status", "open")
+      .order("starts_on", { ascending: false })
+      .limit(1)
+      .maybeSingle<Period>(),
+    supabase
+      .from("periods")
+      .select("ends_on, settled_at")
+      .eq("group_id", membership.group_id)
+      .eq("status", "settled")
+      .gte("settled_at", new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString())
+      .order("settled_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ ends_on: string; settled_at: string }>(),
+  ]);
 
   if (!period) return null;
+  const freshlySettled = justSettled ? { endedOn: justSettled.ends_on } : null;
 
   // These three are independent of each other -- issuing them sequentially
   // meant three full round trips stacked on top of the two above, which is
@@ -214,7 +239,33 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
       }
     : null;
 
+  // The feed: what happened lately, so opening the app during a quiet
+  // week still shows a living contest rather than a static table.
+  const memberById2 = new Map(((members as Member[] | null) ?? []).map((m) => [m.id, m]));
+  const nowMs = Date.now();
+  const feed: FeedItem[] = (((activities as Activity[] | null) ?? []) as Activity[])
+    .slice()
+    .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
+    .slice(0, 6)
+    .map((a) => {
+      const scorable = {
+        sportKey: a.sport_type,
+        distanceKm: Number(a.distance_km),
+        movingTimeMin: (a.moving_time_s ?? 0) / 60,
+      };
+      return {
+        displayName: memberById2.get(a.member_id)?.display_name ?? "?",
+        sportLabel: sportByKey(a.sport_type, sports)?.label ?? a.sport_type,
+        amount: formatAmount(scorable, sports),
+        points: pointsForScorable(scorable, sports),
+        daysAgo: Math.floor((nowMs - new Date(a.started_at).getTime()) / 86400000),
+        isMe: a.member_id === membership.id,
+      };
+    });
+
   return {
+    feed,
+    freshlySettled,
     sports,
     groupId: membership.group_id,
     groupName: active.groupName,

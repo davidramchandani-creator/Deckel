@@ -42,6 +42,19 @@ export default async function RanglistePage() {
     <div className="space-y-5">
       <InstallPrompt />
 
+      {view.freshlySettled && (
+        <Link href="/archiv" className="block">
+          <Sheet className="border-accent-soft">
+            <p className="text-sm">
+              <span className="stamp mr-2">Abgerechnet</span>
+              Die Periode bis{" "}
+              {new Date(view.freshlySettled.endedOn).toLocaleDateString("de-CH")}{" "}
+              ist abgeschlossen — zur Schlussrechnung →
+            </p>
+          </Sheet>
+        </Link>
+      )}
+
       {/* Personal standing — the answer to "how am I doing and what does it cost me". */}
       {me && (
         <Sheet className="perforated-top">
@@ -263,6 +276,30 @@ export default async function RanglistePage() {
             }
           />
         </div>
+
+        {view.feed.length > 0 && (
+          <div className="rule-dashed mt-3 pt-3">
+            <p className="label mb-2">Zuletzt</p>
+            <ul className="text-xs text-ink-soft space-y-1">
+              {view.feed.map((item, i) => (
+                <li key={i} className="flex items-baseline">
+                  <span className={item.isMe ? "text-ink" : ""}>
+                    {item.isMe ? "Du" : item.displayName} · {item.sportLabel}{" "}
+                    {item.amount}
+                  </span>
+                  <span className="leader" aria-hidden="true" />
+                  <span className="num">
+                    {item.daysAgo === 0
+                      ? "heute"
+                      : item.daysAgo === 1
+                        ? "gestern"
+                        : `vor ${item.daysAgo} Tagen`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <Explainer
           periodDays={snapshot.period_days}

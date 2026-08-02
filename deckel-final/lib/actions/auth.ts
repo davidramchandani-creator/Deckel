@@ -3,6 +3,18 @@
 import { createClient } from "@/lib/supabase/server";
 import { createOtpClient } from "@/lib/supabase/server-otp";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+
+/** Where to land after login: a pending invite outranks the leaderboard. */
+async function postLoginTarget(): Promise<string> {
+  const cookieStore = await cookies();
+  const code = cookieStore.get("pop-invite")?.value;
+  if (code) {
+    cookieStore.delete("pop-invite");
+    return `/gruppe/beitreten?code=${encodeURIComponent(code)}`;
+  }
+  return "/";
+}
 import type { EmailOtpType } from "@supabase/supabase-js";
 
 export type AuthActionState = {
@@ -88,7 +100,7 @@ export async function verifyEmailCode(
         access_token: data.session.access_token,
         refresh_token: data.session.refresh_token,
       });
-      redirect("/");
+      redirect(await postLoginTarget());
     }
   }
 

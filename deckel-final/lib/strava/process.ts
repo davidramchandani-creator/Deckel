@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/server-admin";
-import { fetchActivity, getValidAccessToken, toActivityRow } from "@/lib/strava/client";
+import { fetchActivity, getValidAccessToken, toActivityRow, tokenMemberForAthlete } from "@/lib/strava/client";
 import { sportsFromSnapshot } from "@/lib/sports";
 import { computeSettlement, type Participant } from "@/lib/rules";
 import { totalPointsFor } from "@/lib/sports";
@@ -68,8 +68,11 @@ export async function processWebhookEvent(eventId: string): Promise<void> {
           .maybeSingle();
         if (member) {
           await admin.from("strava_tokens").delete().eq("member_id", member.id);
-          await admin.from("members").update({ strava_athlete_id: null }).eq("id", member.id);
         }
+        await admin
+          .from("members")
+          .update({ strava_athlete_id: null })
+          .eq("strava_athlete_id", event.owner_id);
       }
       await admin
         .from("strava_webhook_events")
@@ -98,15 +101,15 @@ export async function processWebhookEvent(eventId: string): Promise<void> {
       return;
     }
 
-    const { data: member } = await admin
+    // One athlete, possibly several groups: the same run scores in every
+    // group this person belongs to, each against that group's own period
+    // and sports rules.
+    const { data: athleteMembers } = await admin
       .from("members")
-      .select("id, group_id")
-      .eq("strava_athlete_id", event.owner_id)
-      .maybeSingle();
+      .select("id, group_id, display_name")
+      .eq("strava_athlete_id", event.owner_id);
 
-    if (!member) {
-      // Athlete isn't in any group here -- nothing to do, but mark it done
-      // so it doesn't get retried forever.
+    if (!athleteMembers || athleteMembers.length === 0) {
       await admin
         .from("strava_webhook_events")
         .update({
@@ -117,11 +120,15 @@ export async function processWebhookEvent(eventId: string): Promise<void> {
       return;
     }
 
-    const accessToken = await getValidAccessToken(admin, member.id);
+    const tokenMemberId = await tokenMemberForAthlete(admin, event.owner_id);
+    if (!tokenMemberId) {
+      throw new Error(`no usable token for athlete ${event.owner_id}`);
+    }
+    const accessToken = await getValidAccessToken(admin, tokenMemberId);
     const activity = await fetchActivity(accessToken, event.object_id);
 
     if (!activity) {
-      // Gone from Strava's side -- treat like a delete.
+      // Gone from Strava's side -- remove every group's copy.
       await admin.from("activities").delete().eq("strava_activity_id", event.object_id);
       await admin
         .from("strava_webhook_events")
@@ -130,40 +137,39 @@ export async function processWebhookEvent(eventId: string): Promise<void> {
       return;
     }
 
-    const period = await findPeriodForActivity(admin, member.group_id, activity.start_date);
-    // Which sports count is decided by the period the activity falls into.
-    // Outside any period the legacy default applies -- the row is stored
-    // with period_id null and never scores anyway.
-    const sports = sportsFromSnapshot(period?.snapshot ?? {});
-    const periodId = period?.id ?? null;
-    const row = toActivityRow(activity, member.id, periodId, sports);
+    for (const member of athleteMembers) {
+      const period = await findPeriodForActivity(admin, member.group_id, activity.start_date);
+      const sports = sportsFromSnapshot(period?.snapshot ?? {});
+      const periodId = period?.id ?? null;
+      const row = toActivityRow(activity, member.id, periodId, sports);
 
-    if (!row) {
-      // Sport type we don't score (swim, walk, ...). If it was previously
-      // a scored type and got edited, remove the stale row.
-      await admin.from("activities").delete().eq("strava_activity_id", activity.id);
-    } else {
+      if (!row) {
+        // Not a scored sport in THIS group (or edited away): drop any stale
+        // copy for this member only.
+        await admin
+          .from("activities")
+          .delete()
+          .eq("strava_activity_id", activity.id)
+          .eq("member_id", member.id);
+        continue;
+      }
+
       const leaderBefore = periodId ? await currentLeader(admin, periodId) : null;
-      await admin.from("activities").upsert(row, { onConflict: "strava_activity_id" });
+      await admin
+        .from("activities")
+        .upsert(row, { onConflict: "member_id,strava_activity_id" });
 
       if (periodId) {
         const leaderAfter = await currentLeader(admin, periodId);
-        // Only shout when the lead actually changed hands.
         if (
           leaderAfter &&
           leaderAfter.memberId === member.id &&
           leaderBefore &&
           leaderBefore.memberId !== member.id
         ) {
-          const { data: me } = await admin
-            .from("members")
-            .select("display_name")
-            .eq("id", member.id)
-            .maybeSingle();
-
           await sendPushToMembers([leaderBefore.memberId], {
             title: "Du wurdest überholt",
-            body: `${me?.display_name ?? "Jemand"} liegt jetzt vorne.`,
+            body: `${member.display_name ?? "Jemand"} liegt jetzt vorne.`,
             url: "/",
             tag: "overtake",
           });

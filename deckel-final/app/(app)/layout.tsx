@@ -1,14 +1,16 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { signOut } from "@/lib/actions/auth";
+import { BottomNav } from "@/components/nav";
+import { PageTitle } from "@/components/header";
 
-// Every page in this group depends on the caller's session and group
-// membership -- never prerender it as static, static caching here would
-// leak one user's view to everyone.
 export const dynamic = "force-dynamic";
 
-export default async function AppLayout({ children }: { children: React.ReactNode }) {
+export default async function AppLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -33,10 +35,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex-1 flex flex-col max-w-md mx-auto w-full">
-      <header className="border-b border-paper-edge px-4 py-3 flex items-center justify-between bg-paper-card">
-        <Link href="/" className="text-sm font-medium tracking-tight">
-          Pace or Pay
-        </Link>
+      <header
+        className="sticky top-0 z-20 bg-paper-card/95 backdrop-blur-sm border-b border-paper-edge px-4 py-3 flex items-center justify-between"
+        style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
+      >
+        <PageTitle />
         <form action={signOut}>
           <button type="submit" className="btn btn-quiet text-xs">
             Abmelden
@@ -44,25 +47,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </form>
       </header>
 
-      <main className="flex-1 px-4 py-4 pb-8">{children}</main>
+      <main key="content" className="flex-1 px-4 py-4 pb-6 page-enter">
+        {children}
+      </main>
 
-      <nav
-        className="border-t border-paper-edge grid grid-cols-4 text-center text-xs bg-paper-card sticky bottom-0"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      >
-        <Link href="/" className="py-3 hover:bg-paper">
-          Rangliste
-        </Link>
-        <Link href="/aktivitaeten" className="py-3 hover:bg-paper">
-          Aktivitaeten
-        </Link>
-        <Link href="/gruppe" className="py-3 hover:bg-paper">
-          Gruppe
-        </Link>
-        <Link href="/archiv" className="py-3 hover:bg-paper">
-          Archiv
-        </Link>
-      </nav>
+      <BottomNav />
     </div>
   );
 }

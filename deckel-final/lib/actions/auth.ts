@@ -14,9 +14,8 @@ export type AuthActionState = {
 /**
  * Sends a login email containing a 6-digit code (and a link, for browsers).
  *
- * Deliberately does NOT pass emailRedirectTo: doing so switches Supabase to
- * the PKCE flow, whose token is bound to a verifier in the requesting
- * browser. A code typed into an installed app could never redeem it.
+ * Uses the plain client on purpose -- see lib/supabase/server-otp.ts. No
+ * emailRedirectTo either: passing one also forces PKCE.
  */
 export async function sendMagicLink(
   _prevState: AuthActionState,
@@ -27,7 +26,7 @@ export async function sendMagicLink(
     return { status: "error", message: "Bitte eine gültige E-Mail-Adresse eingeben." };
   }
 
-  const supabase = await createOtpClient();
+  const supabase = createOtpClient();
   const { error } = await supabase.auth.signInWithOtp({ email });
 
   if (error) {
@@ -46,12 +45,11 @@ export async function sendMagicLink(
 }
 
 /**
- * Redeems the 6-digit code.
+ * Redeems the 6-digit code and establishes the session.
  *
- * GoTrue labels the token differently depending on whether the address is
- * new, confirmed, or being re-authenticated ("magiclink", "email",
- * "recovery"). Rather than guess, try each -- only one can match, and a
- * wrong guess costs a single failed lookup.
+ * GoTrue labels the token differently depending on the account's state
+ * ("email", "magiclink", "recovery"), so each is tried in turn. On success
+ * the session is written into cookies through the SSR client.
  */
 export async function verifyEmailCode(
   _prevState: AuthActionState,
@@ -67,12 +65,22 @@ export async function verifyEmailCode(
     return { status: "sent", email, message: "Der Code besteht aus 6 Ziffern." };
   }
 
-  const supabase = await createOtpClient();
+  const otp = createOtpClient();
   const types: EmailOtpType[] = ["email", "magiclink", "recovery"];
+  let lastError = "";
 
   for (const type of types) {
-    const { error } = await supabase.auth.verifyOtp({ email, token, type });
-    if (!error) {
+    const { data, error } = await otp.auth.verifyOtp({ email, token, type });
+    if (error) {
+      lastError = error.message;
+      continue;
+    }
+    if (data.session) {
+      const supabase = await createClient();
+      await supabase.auth.setSession({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      });
       redirect("/");
     }
   }
@@ -80,8 +88,9 @@ export async function verifyEmailCode(
   return {
     status: "sent",
     email,
-    message:
-      "Dieser Code passt nicht. Nimm die neueste E-Mail — ältere Codes werden ungültig, sobald du einen neuen anforderst.",
+    message: lastError.toLowerCase().includes("expired")
+      ? "Code stimmt nicht oder wurde schon verwendet. Nimm die neueste E-Mail."
+      : "Code konnte nicht geprüft werden. Fordere einen neuen an.",
   };
 }
 

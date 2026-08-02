@@ -1,41 +1,29 @@
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { createClient } from "@supabase/supabase-js";
 
 /**
- * Supabase client for the email login flow, pinned to the implicit flow.
+ * Plain supabase-js client, pinned to the implicit flow.
  *
- * The default PKCE flow issues a `pkce_`-prefixed token that can only be
- * redeemed together with a verifier held in the browser that started the
- * request. That makes two things impossible:
+ * Why not @supabase/ssr's createServerClient: it hardcodes
+ * `flowType: "pkce"` *after* spreading the caller's auth options, so any
+ * flowType passed in is silently discarded. PKCE issues a `pkce_`-prefixed
+ * token that can only be redeemed with a verifier held in the requesting
+ * browser -- which makes a typed-in 6-digit code impossible to redeem, and
+ * breaks opening the link on a second device.
  *
- *   - typing a 6-digit code from the email into the app
- *   - opening the link on a different device than it was requested from
- *
- * The implicit flow issues a plain token instead, which verifyOtp can
- * redeem from email + code alone. That is exactly what an installed PWA
- * needs, since it has its own cookie store separate from the browser.
+ * This client only mints and redeems the code. The resulting session is
+ * handed to the cookie-writing SSR client afterwards, so cookies still
+ * behave exactly as before.
  */
-export async function createOtpClient() {
-  const cookieStore = await cookies();
-
-  return createServerClient(
+export function createOtpClient() {
+  return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      auth: { flowType: "implicit" },
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
-          } catch {
-            // Server Component render -- middleware refreshes instead.
-          }
-        },
+      auth: {
+        flowType: "implicit",
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
       },
     }
   );

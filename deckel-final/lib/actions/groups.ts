@@ -14,12 +14,19 @@ export async function createGroup(
   formData: FormData
 ): Promise<GroupActionState> {
   const name = String(formData.get("name") ?? "").trim();
+  const displayName = String(formData.get("display_name") ?? "").trim();
   if (!name) {
     return { status: "error", message: "Bitte einen Namen fuer die Gruppe eingeben." };
   }
+  if (displayName.length < 2) {
+    return { status: "error", message: "Bitte auch deinen eigenen Namen eintragen." };
+  }
 
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("create_group", { p_name: name });
+  const { data, error } = await supabase.rpc("create_group", {
+    p_name: name,
+    p_display_name: displayName,
+  });
 
   if (error || !data || data.length === 0) {
     return { status: "error", message: error?.message ?? "Gruppe konnte nicht erstellt werden." };

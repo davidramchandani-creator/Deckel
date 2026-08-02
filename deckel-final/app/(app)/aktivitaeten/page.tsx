@@ -2,10 +2,18 @@ import { createClient } from "@/lib/supabase/server";
 import type { Activity, Participation, Period } from "@/lib/types";
 import { StatusSwitch } from "./status-switch";
 import { ManualEntryForm } from "./manual-entry-form";
+import { DeleteActivity } from "./delete-activity";
+import { Sheet, SectionLabel, Line, points } from "@/components/receipt";
+import { totalPoints, type ActivityKind } from "@/lib/rules";
 
 export const dynamic = "force-dynamic";
 
-export default async function MeineAktivitaetenPage() {
+export default async function MeineAktivitaetenPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ strava?: string }>;
+}) {
+  const params = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -19,7 +27,11 @@ export default async function MeineAktivitaetenPage() {
     .maybeSingle();
 
   if (!member) {
-    return <p className="text-sm text-ink-soft">Noch keine Gruppe.</p>;
+    return (
+      <Sheet className="perforated-top">
+        <p className="text-sm text-ink-soft">Du bist noch in keiner Gruppe.</p>
+      </Sheet>
+    );
   }
 
   const { data: period } = await supabase
@@ -32,7 +44,11 @@ export default async function MeineAktivitaetenPage() {
     .maybeSingle<Period>();
 
   if (!period) {
-    return <p className="text-sm text-ink-soft">Keine offene Periode.</p>;
+    return (
+      <Sheet className="perforated-top">
+        <p className="text-sm text-ink-soft">Gerade läuft keine Periode.</p>
+      </Sheet>
+    );
   }
 
   const { data: participation } = await supabase
@@ -51,64 +67,124 @@ export default async function MeineAktivitaetenPage() {
     .returns<Activity[]>();
 
   const status = participation?.status ?? "active";
+  const snapshot = period.settings_snapshot;
+  const periodStarted = new Date(period.starts_on) <= new Date();
+
+  const myPoints = totalPoints(
+    (activities ?? []).map((a) => ({
+      kind: a.sport_type as ActivityKind,
+      distanceKm: Number(a.distance_km),
+    })),
+    snapshot.bike_factor
+  );
+
+  const runKm = (activities ?? [])
+    .filter((a) => a.sport_type === "run")
+    .reduce((s, a) => s + Number(a.distance_km), 0);
+  const bikeKm = (activities ?? [])
+    .filter((a) => a.sport_type === "bike")
+    .reduce((s, a) => s + Number(a.distance_km), 0);
 
   return (
-    <div className="space-y-6">
-      <section>
-        <h2 className="text-xs uppercase tracking-wide text-ink-soft mb-2">Status</h2>
-        <StatusSwitch periodId={period.id} status={status} />
-      </section>
-
-      <section>
-        <h2 className="text-xs uppercase tracking-wide text-ink-soft mb-2">Strava</h2>
-        {member.strava_athlete_id ? (
+    <div className="space-y-5">
+      {params.strava === "connected" && (
+        <Sheet className="border-accent-soft">
           <p className="text-sm">
-            Verbunden (Athlet #{member.strava_athlete_id}). Neue Laeufe erscheinen
-            automatisch, meist innert Minuten.
+            Strava ist verbunden. Neue Läufe erscheinen ab jetzt automatisch.
+          </p>
+        </Sheet>
+      )}
+      {params.strava === "denied" && (
+        <Sheet>
+          <p className="text-sm text-accent">
+            Du hast den Zugriff abgelehnt. Ohne Strava kannst du km von Hand
+            eintragen.
+          </p>
+        </Sheet>
+      )}
+
+      <Sheet className="perforated-top">
+        <SectionLabel>Deine Bilanz</SectionLabel>
+        <Line emphasis left="Punkte" right={points(myPoints)} />
+        <Line left="Laufen" right={`${runKm.toFixed(1)} km`} />
+        <Line left="Velo" right={`${bikeKm.toFixed(1)} km`} />
+      </Sheet>
+
+      <Sheet>
+        <SectionLabel>Bist du dabei?</SectionLabel>
+        <StatusSwitch
+          periodId={period.id}
+          status={status}
+          periodStarted={periodStarted}
+        />
+      </Sheet>
+
+      <Sheet>
+        <SectionLabel>Strava</SectionLabel>
+        {member.strava_athlete_id ? (
+          <p className="text-sm text-ink-soft">
+            Verbunden. Läufe und Fahrten erscheinen automatisch, meist innert
+            Minuten.
           </p>
         ) : (
           <div className="space-y-2">
             <p className="text-sm text-ink-soft">
-              Noch nicht verbunden. Ohne Strava kannst du km von Hand eintragen.
+              Verbinde Strava, dann musst du nichts mehr von Hand eintragen.
             </p>
-            <a
-              href="/api/strava/authorize"
-              className="inline-block border border-ink bg-ink text-paper px-3 py-1.5 text-sm"
-            >
+            <a href="/api/strava/authorize" className="btn btn-primary w-full">
               Mit Strava verbinden
             </a>
           </div>
         )}
-      </section>
+      </Sheet>
 
-      <section>
-        <h2 className="text-xs uppercase tracking-wide text-ink-soft mb-2">Von Hand eintragen</h2>
-        <ManualEntryForm periodId={period.id} />
-      </section>
+      <Sheet>
+        <SectionLabel>Von Hand eintragen</SectionLabel>
+        <ManualEntryForm
+          periodId={period.id}
+          bikeFactor={snapshot.bike_factor}
+          periodStart={period.starts_on}
+        />
+      </Sheet>
 
-      <section>
-        <h2 className="text-xs uppercase tracking-wide text-ink-soft mb-2">
-          Meine Aktivitaeten dieser Periode
-        </h2>
+      <Sheet>
+        <SectionLabel>Diese Periode</SectionLabel>
         {!activities || activities.length === 0 ? (
           <p className="text-sm text-ink-soft">
-            Noch keine Aktivitaet in dieser Periode. Verbinde Strava oder trage km von Hand ein.
+            Noch nichts eingetragen. Verbinde Strava oder trag deine km von Hand
+            ein.
           </p>
         ) : (
-          <ul className="text-sm divide-y divide-ink/10 border-y border-ink/10">
+          <ul className="text-sm">
             {activities.map((a) => (
-              <li key={a.id} className="py-1.5 flex">
-                <span>
-                  {a.sport_type === "run" ? "Lauf" : "Velo"}
-                  {a.manual ? " (manuell)" : ""}
-                </span>
-                <span className="leader" />
-                <span>{Number(a.distance_km).toFixed(1)} km</span>
+              <li key={a.id} className="rule-single first:border-t-0">
+                <Line
+                  left={
+                    <span>
+                      {a.sport_type === "run" ? "Lauf" : "Velo"}
+                      {a.source === "manual" && (
+                        <span className="text-ink-faint text-xs"> · von Hand</span>
+                      )}
+                    </span>
+                  }
+                  right={`${Number(a.distance_km).toFixed(1)} km`}
+                  sub={
+                    <span className="flex items-center gap-2">
+                      <span className="text-ink-faint">
+                        {new Date(a.started_at).toLocaleDateString("de-CH", {
+                          day: "2-digit",
+                          month: "2-digit",
+                        })}
+                      </span>
+                      {a.source === "manual" && <DeleteActivity activityId={a.id} />}
+                    </span>
+                  }
+                />
               </li>
             ))}
           </ul>
         )}
-      </section>
+      </Sheet>
     </div>
   );
 }

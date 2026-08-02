@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { createGroup, type GroupActionState } from "@/lib/actions/groups";
+import { Sheet } from "@/components/receipt";
 
 const initialState: GroupActionState = { status: "idle" };
 
@@ -9,28 +10,49 @@ export default function NeueGruppePage() {
   const [state, formAction, pending] = useActionState(createGroup, initialState);
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-sm tracking-tight">Neue Gruppe</h1>
+    <Sheet className="perforated-top space-y-4">
+      <div>
+        <h1 className="text-lg font-medium mb-1">Neue Gruppe</h1>
+        <p className="text-sm text-ink-soft">
+          Du wirst Admin und kannst die Regeln festlegen. Die erste Periode
+          startet sofort und läuft 14 Tage.
+        </p>
+      </div>
+
       <form action={formAction} className="space-y-3">
         <label className="block text-sm">
-          Name
+          <span className="text-ink-soft">Name der Gruppe</span>
           <input
             type="text"
             name="name"
             required
+            autoFocus
             placeholder="z.B. Team Buchhaltung"
-            className="mt-1 w-full border border-ink/30 bg-paper px-2 py-1.5 text-sm outline-none focus:border-ink"
+            className="field mt-1"
           />
         </label>
-        {state.status === "error" && <p className="text-sm text-red-800">{state.message}</p>}
-        <button
-          type="submit"
-          disabled={pending}
-          className="w-full border border-ink bg-ink text-paper px-2 py-1.5 text-sm disabled:opacity-50"
-        >
-          {pending ? "Wird erstellt..." : "Gruppe erstellen"}
+
+        <label className="block text-sm">
+          <span className="text-ink-soft">Dein Name</span>
+          <input
+            type="text"
+            name="display_name"
+            required
+            minLength={2}
+            maxLength={40}
+            placeholder="z.B. Dave R."
+            className="field mt-1"
+          />
+        </label>
+
+        {state.status === "error" && (
+          <p className="text-sm text-accent">{state.message}</p>
+        )}
+
+        <button type="submit" disabled={pending} className="btn btn-primary w-full">
+          {pending ? "Wird erstellt…" : "Gruppe erstellen"}
         </button>
       </form>
-    </div>
+    </Sheet>
   );
 }

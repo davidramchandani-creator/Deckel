@@ -19,9 +19,29 @@ export interface SettlementRow {
   activities: Activity[];
 }
 
+export interface MyStanding {
+  memberId: string;
+  displayName: string;
+  points: number;
+  owed: number;
+  status: "active" | "sick" | "withdrawn";
+  isRecordHolder: boolean;
+  /** Points behind the record holder. 0 when leading. */
+  behind: number;
+  /** Rank among non-withdrawn participants, 1-based. */
+  rank: number;
+  /** How many are being ranked. */
+  of: number;
+  /** True once the cap is reached -- further losses cost nothing more. */
+  capReached: boolean;
+}
+
 export interface GroupSettlementView {
   groupId: string;
   groupName: string;
+  isAdmin: boolean;
+  inviteCode: string;
+  me: MyStanding | null;
   period: Period;
   daysRemaining: number;
   currentDay: number;
@@ -46,7 +66,7 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
 
   const { data: membership } = await supabase
     .from("members")
-    .select("id, group_id, groups(id, name)")
+    .select("id, group_id, role, groups(id, name, invite_code)")
     .eq("user_id", user.id)
     .limit(1)
     .maybeSingle();
@@ -142,9 +162,29 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
 
   const activeCount = rows.filter((r) => r.status !== "withdrawn").length;
 
+  const ranked = rows.filter((r) => r.status !== "withdrawn");
+  const myRow = rows.find((r) => r.memberId === membership.id) ?? null;
+  const me: MyStanding | null = myRow
+    ? {
+        memberId: myRow.memberId,
+        displayName: myRow.displayName,
+        points: myRow.points,
+        owed: myRow.owed,
+        status: myRow.status,
+        isRecordHolder: myRow.isRecordHolder,
+        behind: Math.max(0, result.record - myRow.points),
+        rank: ranked.findIndex((r) => r.memberId === myRow.memberId) + 1,
+        of: ranked.length,
+        capReached: myRow.owed > 0 && myRow.owed >= myRow.capApplied,
+      }
+    : null;
+
   return {
     groupId: membership.group_id,
     groupName: group?.name ?? "",
+    isAdmin: membership.role === "admin",
+    inviteCode: (group as { invite_code?: string } | null)?.invite_code ?? "",
+    me,
     period,
     daysRemaining: Math.max(0, periodDays - day),
     currentDay: day,

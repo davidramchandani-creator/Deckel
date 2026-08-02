@@ -25,7 +25,7 @@ export function PaidToggle({
           if (result.status === "error") setPaid(!next);
         });
       }}
-      className="text-xs underline underline-offset-2 disabled:opacity-50"
+      className={`text-xs ${paid ? "stamp" : "underline underline-offset-2 text-ink-soft"} disabled:opacity-50`}
       aria-pressed={paid}
     >
       {paid ? "bezahlt" : "offen"}

@@ -1,40 +1,170 @@
 @import "tailwindcss";
 
+/*
+ * Deckel — visual language.
+ *
+ * The motif is a restaurant bill, because the pot ends up paying for a
+ * team meal. Taken seriously but not literally: paper tones, dotted
+ * leaders between name and amount, a double rule before the total.
+ *
+ * Deliberate split: prose is set in a normal sans so it stays easy to
+ * read, figures are monospace so columns line up and amounts are
+ * scannable. All-monospace looks like a gimmick and hurts comprehension.
+ */
+
 :root {
-  --color-paper: #f4f1ea;
-  --color-paper-dark: #e8e3d6;
-  --color-ink: #26241f;
-  --color-ink-soft: #6b6659;
-  --color-rule: #26241f;
+  --paper: #f5f2ea;
+  --paper-card: #fbf9f4;
+  --paper-edge: #e7e1d3;
+  --ink: #23211c;
+  --ink-soft: #6f6a5d;
+  --ink-faint: #a8a294;
+  --accent: #8c2f24;      /* stamp red — used sparingly, for what you owe */
+  --accent-soft: #b8695f;
+  --leader: #c8c1b0;
 }
 
 @theme inline {
-  --color-paper: var(--color-paper);
-  --color-paper-dark: var(--color-paper-dark);
-  --color-ink: var(--color-ink);
-  --color-ink-soft: var(--color-ink-soft);
-  --color-rule: var(--color-rule);
+  --color-paper: var(--paper);
+  --color-paper-card: var(--paper-card);
+  --color-paper-edge: var(--paper-edge);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
-body {
-  background: var(--color-paper);
-  color: var(--color-ink);
+html {
+  background: var(--paper);
+  -webkit-text-size-adjust: 100%;
 }
 
-/* Receipt-style dotted leader between a label and an amount, e.g.
-   <span className="leader">...</span> stretched between two flex items. */
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+/* Figures, amounts, anything that should align in a column. */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The receipt sheet itself. */
+.sheet {
+  background: var(--paper-card);
+  border: 1px solid var(--paper-edge);
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(35, 33, 28, 0.05);
+}
+
+/*
+ * Torn/perforated top edge. Built from a repeating conic gradient so it
+ * scales without images and prints sensibly.
+ */
+.perforated-top {
+  position: relative;
+}
+.perforated-top::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -7px;
+  height: 8px;
+  background:
+    radial-gradient(circle at 6px 8px, transparent 5px, var(--paper-card) 5px) repeat-x;
+  background-size: 12px 8px;
+}
+
+/* Dotted leader stretched between a label and its amount. */
 .leader {
   flex: 1 1 auto;
-  border-bottom: 1px dotted var(--color-ink-soft);
-  margin: 0 0.5em;
-  height: 0.6em;
+  align-self: baseline;
+  margin: 0 0.55em;
+  border-bottom: 1px dotted var(--leader);
+  transform: translateY(-0.28em);
 }
 
 .rule-double {
-  border-top: 3px double var(--color-rule);
+  border-top: 3px double var(--ink);
+}
+.rule-single {
+  border-top: 1px solid var(--paper-edge);
+}
+.rule-dashed {
+  border-top: 1px dashed var(--leader);
 }
 
-.rule-single {
-  border-top: 1px solid var(--color-rule);
+/* Small caps label used for section headers on the bill. */
+.label {
+  font-size: 0.6875rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* "Bezahlt" style stamp. */
+.stamp {
+  display: inline-block;
+  border: 2px solid var(--accent-soft);
+  color: var(--accent-soft);
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transform: rotate(-4deg);
+  opacity: 0.85;
+}
+
+/* Focus ring that matches the paper theme instead of the browser blue. */
+:where(a, button, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* Inputs */
+.field {
+  width: 100%;
+  background: var(--paper);
+  border: 1px solid var(--paper-edge);
+  border-radius: 2px;
+  padding: 0.6rem 0.65rem;
+  font-size: 1rem; /* 16px — stops iOS zooming on focus */
+  color: var(--ink);
+}
+.field:focus {
+  border-color: var(--ink-soft);
+  outline: none;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 2px;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  border: 1px solid var(--ink);
+  transition: opacity 0.12s ease;
+}
+.btn:disabled { opacity: 0.45; }
+.btn-primary { background: var(--ink); color: var(--paper-card); }
+.btn-secondary { background: transparent; color: var(--ink); }
+.btn-quiet {
+  border-color: transparent;
+  color: var(--ink-soft);
+  padding-inline: 0.35rem;
+}
+
+/* Respect users who prefer less motion. */
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

@@ -18,32 +18,48 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect("/login");
   }
 
+  // Early members got their email address as a display name. Nudge them to
+  // pick a real one before it shows up on the leaderboard for everyone.
+  const { data: member } = await supabase
+    .from("members")
+    .select("display_name")
+    .eq("user_id", user.id)
+    .limit(1)
+    .maybeSingle();
+
+  if (member?.display_name?.includes("@")) {
+    redirect("/name");
+  }
+
   return (
     <div className="flex-1 flex flex-col max-w-md mx-auto w-full">
-      <header className="border-b border-ink/20 px-4 py-3 flex items-center justify-between">
-        <Link href="/" className="text-sm tracking-tight">
+      <header className="border-b border-paper-edge px-4 py-3 flex items-center justify-between bg-paper-card">
+        <Link href="/" className="text-sm font-medium tracking-tight">
           Deckel
         </Link>
         <form action={signOut}>
-          <button type="submit" className="text-xs text-ink-soft hover:text-ink">
+          <button type="submit" className="btn btn-quiet text-xs">
             Abmelden
           </button>
         </form>
       </header>
 
-      <main className="flex-1 px-4 py-4">{children}</main>
+      <main className="flex-1 px-4 py-4 pb-8">{children}</main>
 
-      <nav className="border-t border-ink/20 grid grid-cols-4 text-center text-xs">
-        <Link href="/" className="py-2.5 hover:bg-paper-dark/40">
+      <nav
+        className="border-t border-paper-edge grid grid-cols-4 text-center text-xs bg-paper-card sticky bottom-0"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <Link href="/" className="py-3 hover:bg-paper">
           Rangliste
         </Link>
-        <Link href="/aktivitaeten" className="py-2.5 hover:bg-paper-dark/40">
+        <Link href="/aktivitaeten" className="py-3 hover:bg-paper">
           Aktivitaeten
         </Link>
-        <Link href="/gruppe" className="py-2.5 hover:bg-paper-dark/40">
+        <Link href="/gruppe" className="py-3 hover:bg-paper">
           Gruppe
         </Link>
-        <Link href="/archiv" className="py-2.5 hover:bg-paper-dark/40">
+        <Link href="/archiv" className="py-3 hover:bg-paper">
           Archiv
         </Link>
       </nav>

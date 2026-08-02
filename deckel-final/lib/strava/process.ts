@@ -1,5 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/server-admin";
 import { fetchActivity, getValidAccessToken, toActivityRow } from "@/lib/strava/client";
+import { computeSettlement, totalPoints, type ActivityKind, type Participant } from "@/lib/rules";
+import { sendPushToMembers } from "@/lib/push";
 
 /**
  * Finds the open period for a member's group that contains `startedAt`.
@@ -129,7 +131,32 @@ export async function processWebhookEvent(eventId: string): Promise<void> {
       // a scored type and got edited, remove the stale row.
       await admin.from("activities").delete().eq("strava_activity_id", activity.id);
     } else {
+      const leaderBefore = periodId ? await currentLeader(admin, periodId) : null;
       await admin.from("activities").upsert(row, { onConflict: "strava_activity_id" });
+
+      if (periodId) {
+        const leaderAfter = await currentLeader(admin, periodId);
+        // Only shout when the lead actually changed hands.
+        if (
+          leaderAfter &&
+          leaderAfter.memberId === member.id &&
+          leaderBefore &&
+          leaderBefore.memberId !== member.id
+        ) {
+          const { data: me } = await admin
+            .from("members")
+            .select("display_name")
+            .eq("id", member.id)
+            .maybeSingle();
+
+          await sendPushToMembers([leaderBefore.memberId], {
+            title: "Du wurdest überholt",
+            body: `${me?.display_name ?? "Jemand"} liegt jetzt vorne.`,
+            url: "/",
+            tag: "overtake",
+          });
+        }
+      }
     }
 
     await admin
@@ -144,4 +171,66 @@ export async function processWebhookEvent(eventId: string): Promise<void> {
       .eq("id", eventId);
     throw err;
   }
+}
+
+
+/**
+ * Who currently leads a period, by points. Withdrawn members are excluded,
+ * mirroring the settlement rule.
+ */
+async function currentLeader(
+  admin: ReturnType<typeof createAdminClient>,
+  periodId: string
+): Promise<{ memberId: string; points: number } | null> {
+  const { data: period } = await admin
+    .from("periods")
+    .select("group_id, settings_snapshot")
+    .eq("id", periodId)
+    .maybeSingle();
+  if (!period) return null;
+
+  const snapshot = period.settings_snapshot as { bike_factor: number; cap_chf: number; period_days: number };
+
+  const { data: members } = await admin
+    .from("members")
+    .select("id")
+    .eq("group_id", period.group_id);
+
+  const { data: activities } = await admin
+    .from("activities")
+    .select("member_id, sport_type, distance_km")
+    .eq("period_id", periodId);
+
+  const { data: participations } = await admin
+    .from("participations")
+    .select("member_id, status, sick_from_day")
+    .eq("period_id", periodId);
+
+  const byMember = new Map<string, { kind: ActivityKind; distanceKm: number }[]>();
+  for (const a of activities ?? []) {
+    const list = byMember.get(a.member_id) ?? [];
+    list.push({ kind: a.sport_type as ActivityKind, distanceKm: Number(a.distance_km) });
+    byMember.set(a.member_id, list);
+  }
+
+  const partByMember = new Map(
+    (participations ?? []).map((p) => [
+      p.member_id,
+      { status: p.status as Participant["status"], sickFromDay: p.sick_from_day ?? undefined },
+    ])
+  );
+
+  const participants: Participant[] = (members ?? []).map((m) => {
+    const part = partByMember.get(m.id);
+    return {
+      memberId: m.id,
+      points: totalPoints(byMember.get(m.id) ?? [], snapshot.bike_factor),
+      status: part?.status ?? "active",
+      sickFromDay: part?.sickFromDay,
+    };
+  });
+
+  const result = computeSettlement(participants, snapshot.cap_chf, snapshot.period_days);
+  const leader = result.lines.find((l) => l.isRecordHolder && l.points > 0);
+  return leader ? { memberId: leader.memberId, points: leader.points } : null;
 }

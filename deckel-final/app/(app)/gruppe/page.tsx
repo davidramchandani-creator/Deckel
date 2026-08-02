@@ -1,7 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
-import type { GroupSettings, Member } from "@/lib/types";
+import type { GroupSettings, Member, Period } from "@/lib/types";
 import { WebhookButton } from "./webhook-button";
+import { InviteShare } from "./invite";
+import { RulesForm } from "./rules-form";
+import { Sheet, SectionLabel, Line, money } from "@/components/receipt";
+import { PushToggle } from "@/components/push-toggle";
+
+export const dynamic = "force-dynamic";
 
 export default async function GruppePage() {
   const supabase = await createClient();
@@ -19,20 +25,16 @@ export default async function GruppePage() {
   if (!myMembership) {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-ink-soft">
-          Noch keine Gruppe. Erstelle eine oder tritt einer bei.
-        </p>
+        <Sheet className="perforated-top">
+          <p className="text-sm text-ink-soft">
+            Du bist noch in keiner Gruppe.
+          </p>
+        </Sheet>
         <div className="flex gap-2">
-          <Link
-            href="/gruppe/neu"
-            className="flex-1 text-center border border-ink bg-ink text-paper px-2 py-1.5 text-sm"
-          >
+          <Link href="/gruppe/neu" className="btn btn-primary flex-1">
             Gruppe erstellen
           </Link>
-          <Link
-            href="/gruppe/beitreten"
-            className="flex-1 text-center border border-ink px-2 py-1.5 text-sm"
-          >
+          <Link href="/gruppe/beitreten" className="btn btn-secondary flex-1">
             Beitreten
           </Link>
         </div>
@@ -40,13 +42,17 @@ export default async function GruppePage() {
     );
   }
 
-  const group = Array.isArray(myMembership.groups) ? myMembership.groups[0] : myMembership.groups;
+  const group = Array.isArray(myMembership.groups)
+    ? myMembership.groups[0]
+    : myMembership.groups;
+  const isAdmin = myMembership.role === "admin";
 
   const { data: members } = await supabase
     .from("members")
     .select("*")
     .eq("group_id", myMembership.group_id)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true })
+    .returns<Member[]>();
 
   const { data: settings } = await supabase
     .from("group_settings")
@@ -56,67 +62,107 @@ export default async function GruppePage() {
     .limit(1)
     .maybeSingle<GroupSettings>();
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-sm tracking-tight mb-1">{group?.name}</h1>
-        <p className="text-xs text-ink-soft">
-          Einladungscode: <span className="text-ink">{group?.invite_code}</span>
-        </p>
-      </div>
+  const { data: period } = await supabase
+    .from("periods")
+    .select("*")
+    .eq("group_id", myMembership.group_id)
+    .eq("status", "open")
+    .maybeSingle<Period>();
 
-      <section>
-        <h2 className="text-xs uppercase tracking-wide text-ink-soft mb-2">Mitglieder</h2>
-        <ul className="text-sm divide-y divide-ink/10 border-y border-ink/10">
-          {(members as Member[] | null)?.map((m) => (
-            <li key={m.id} className="py-1.5 flex items-center">
-              <span>{m.display_name}</span>
-              <span className="leader" />
-              <span className="text-ink-soft text-xs">
-                {m.role === "admin" ? "Admin" : "Mitglied"}
-              </span>
+  return (
+    <div className="space-y-5">
+      <Sheet className="perforated-top">
+        <h1 className="text-lg font-medium">{group?.name}</h1>
+        {period && (
+          <p className="text-xs text-ink-soft mt-0.5">
+            Periode {period.starts_on} bis {period.ends_on}
+          </p>
+        )}
+        <div className="mt-4">
+          <InviteShare inviteCode={group?.invite_code ?? ""} />
+        </div>
+      </Sheet>
+
+      <Sheet>
+        <SectionLabel>Mitglieder ({members?.length ?? 0})</SectionLabel>
+        <ul className="text-sm">
+          {members?.map((m) => (
+            <li key={m.id} className="rule-single first:border-t-0">
+              <Line
+                left={
+                  <span>
+                    {m.display_name}
+                    {m.user_id === user!.id && (
+                      <span className="text-ink-faint text-xs"> (du)</span>
+                    )}
+                  </span>
+                }
+                right={
+                  <span className="text-ink-faint text-xs">
+                    {m.role === "admin" ? "Admin" : "Mitglied"}
+                  </span>
+                }
+                sub={
+                  m.strava_athlete_id ? (
+                    <span className="text-ink-faint">Strava verbunden</span>
+                  ) : (
+                    <span className="text-ink-faint">ohne Strava</span>
+                  )
+                }
+              />
             </li>
           ))}
         </ul>
-      </section>
+      </Sheet>
 
       {settings && (
-        <section>
-          <h2 className="text-xs uppercase tracking-wide text-ink-soft mb-2">Regeln</h2>
-          <dl className="text-sm space-y-1">
-            <div className="flex">
-              <dt>Periode</dt>
-              <span className="leader" />
-              <dd>{settings.period_days} Tage</dd>
+        <Sheet>
+          <SectionLabel>Regeln</SectionLabel>
+          {isAdmin ? (
+            <RulesForm
+              groupId={myMembership.group_id}
+              periodDays={settings.period_days}
+              bikeFactor={Number(settings.bike_factor)}
+              capChf={Number(settings.cap_chf)}
+            />
+          ) : (
+            <div className="text-sm">
+              <Line left="Periode" right={`${settings.period_days} Tage`} />
+              <Line left="Velo-Faktor" right={Number(settings.bike_factor).toFixed(2)} />
+              <Line
+                left="Deckel"
+                right={money(Number(settings.cap_chf), settings.currency)}
+              />
+              <p className="text-xs text-ink-soft mt-2">
+                Nur Admins können die Regeln ändern.
+              </p>
             </div>
-            <div className="flex">
-              <dt>Velo-Faktor</dt>
-              <span className="leader" />
-              <dd>{settings.bike_factor.toFixed(2)}</dd>
-            </div>
-            <div className="flex">
-              <dt>Deckel</dt>
-              <span className="leader" />
-              <dd>
-                {settings.currency} {settings.cap_chf.toFixed(2)}
-              </dd>
-            </div>
-          </dl>
-          {myMembership.role === "admin" && (
-            <p className="text-xs text-ink-soft mt-2">
-              Regeln aendern: bald verfuegbar. Nur Admins duerfen das.
-            </p>
           )}
-        </section>
+        </Sheet>
       )}
 
-      {myMembership.role === "admin" && (
-        <section>
-          <h2 className="text-xs uppercase tracking-wide text-ink-soft mb-2">
-            Einrichtung
-          </h2>
+      <Sheet>
+        <SectionLabel>Dein Profil</SectionLabel>
+        <Link href="/name" className="btn btn-secondary w-full">
+          Namen ändern
+        </Link>
+      </Sheet>
+
+      {process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && (
+        <Sheet>
+          <SectionLabel>Benachrichtigungen</SectionLabel>
+          <PushToggle vapidPublicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY} />
+        </Sheet>
+      )}
+
+      {isAdmin && (
+        <Sheet>
+          <SectionLabel>Einrichtung</SectionLabel>
+          <p className="text-xs text-ink-soft mb-2">
+            Einmalig nötig, damit Strava neue Läufe automatisch meldet.
+          </p>
           <WebhookButton />
-        </section>
+        </Sheet>
       )}
     </div>
   );

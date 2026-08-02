@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/server-admin";
 import { isAuthorizedCron } from "@/lib/cron/auth";
 import { computeSettlement, totalPoints, type ActivityKind, type Participant } from "@/lib/rules";
 import { NextResponse, type NextRequest } from "next/server";
+import { sendPushToMembers } from "@/lib/push";
 
 export const maxDuration = 60;
 
@@ -138,6 +139,22 @@ export async function GET(request: NextRequest) {
         status: "open",
       });
     }
+
+    // Tell everyone what the period cost them, while it is still fresh.
+    const currency = snapshot.currency;
+    await Promise.all(
+      result.lines.map((line) =>
+        sendPushToMembers([line.memberId], {
+          title: "Periode abgerechnet",
+          body:
+            line.owed > 0
+              ? `Du zahlst ${currency} ${line.owed.toFixed(2)} in den Topf.`
+              : "Du zahlst nichts — stark gelaufen.",
+          url: "/archiv",
+          tag: `settled-${period.id}`,
+        })
+      )
+    );
 
     closed.push(period.id);
   }

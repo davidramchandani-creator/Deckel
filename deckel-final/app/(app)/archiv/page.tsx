@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { PaidToggle } from "./paid-toggle";
+import { Sheet, SectionLabel, Line, money, points } from "@/components/receipt";
 import type { Period } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +29,11 @@ export default async function ArchivPage() {
     .maybeSingle();
 
   if (!member) {
-    return <p className="text-sm text-ink-soft">Noch keine Gruppe.</p>;
+    return (
+      <Sheet className="perforated-top">
+        <p className="text-sm text-ink-soft">Du bist noch in keiner Gruppe.</p>
+      </Sheet>
+    );
   }
 
   const { data: periods } = await supabase
@@ -71,40 +76,43 @@ export default async function ArchivPage() {
         const currency = period.settings_snapshot.currency;
 
         return (
-          <section key={period.id}>
-            <h2 className="text-xs uppercase tracking-wide text-ink-soft mb-2">
-              {period.starts_on} bis {period.ends_on}
-            </h2>
+          <Sheet key={period.id} className="perforated-top">
+            <SectionLabel>
+              {new Date(period.starts_on).toLocaleDateString("de-CH")} bis{" "}
+              {new Date(period.ends_on).toLocaleDateString("de-CH")}
+            </SectionLabel>
             <ul className="text-sm">
               {rows.map((row) => {
                 const memberRel = Array.isArray(row.members) ? row.members[0] : row.members;
+                const owed = Number(row.owed_chf);
                 return (
-                  <li key={row.id} className="border-b border-ink/10 py-1.5 flex items-baseline">
-                    <span>{memberRel?.display_name ?? "?"}</span>
-                    <span className="leader" />
-                    <span className="text-ink-soft text-xs mr-2">
-                      {Number(row.points).toFixed(1)} P
-                    </span>
-                    <span className="tabular-nums mr-2">
-                      {Number(row.owed_chf) > 0
-                        ? `${currency} ${Number(row.owed_chf).toFixed(2)}`
-                        : "--"}
-                    </span>
-                    {Number(row.owed_chf) > 0 && (
-                      <PaidToggle settlementId={row.id} initialPaid={row.paid} />
-                    )}
+                  <li key={row.id} className="rule-single first:border-t-0">
+                    <Line
+                      left={memberRel?.display_name ?? "?"}
+                      right={
+                        <span className={owed > 0 ? "text-accent" : "text-ink-faint"}>
+                          {owed > 0 ? money(owed, currency) : "—"}
+                        </span>
+                      }
+                      sub={
+                        <span className="flex items-center gap-2">
+                          <span className="num text-ink-faint">
+                            {points(Number(row.points))}
+                          </span>
+                          {owed > 0 && (
+                            <PaidToggle settlementId={row.id} initialPaid={row.paid} />
+                          )}
+                        </span>
+                      }
+                    />
                   </li>
                 );
               })}
             </ul>
-            <div className="rule-double pt-2 mt-2 text-sm flex">
-              <span>Topf</span>
-              <span className="leader" />
-              <span className="tabular-nums">
-                {currency} {pot.toFixed(2)}
-              </span>
+            <div className="rule-double mt-3 pt-2">
+              <Line emphasis left="Topf" right={money(pot, currency)} />
             </div>
-          </section>
+          </Sheet>
         );
       })}
     </div>

@@ -12,7 +12,7 @@ export default async function RanglistePage() {
     return (
       <div className="space-y-5">
         <Sheet className="perforated-top">
-          <h1 className="text-lg font-medium mb-1">Willkommen bei Deckel</h1>
+          <h1 className="text-lg font-medium mb-1">Willkommen bei Pace or Pay</h1>
           <p className="text-sm text-ink-soft leading-relaxed">
             Ihr lauft und fahrt Velo gegeneinander. Wer zurueckliegt, zahlt die
             Differenz in einen gemeinsamen Topf — und der bezahlt am Ende das

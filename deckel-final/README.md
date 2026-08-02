@@ -1,4 +1,7 @@
-# Deckel
+# Pace or Pay
+
+*(intern früher „Deckel“ — der Begriff bleibt im UI als Bezeichnung für die
+Obergrenze pro Person erhalten.)*
 
 Team-Lauf-Challenge. Wer hinter dem Besten liegt, zahlt die Differenz in
 einen gemeinsamen Topf -- und der finanziert am Ende ein Team-Essen.
@@ -76,7 +79,7 @@ Danach unter **Authentication → URL Configuration** die Redirect-URL
 Auf <https://www.strava.com/settings/api> eine App anlegen.
 
 - **Authorization Callback Domain**: nur die nackte Domain, keine URL.
-  Lokal `localhost`, produktiv z.B. `deckel.vercel.app`.
+  Lokal `localhost`, produktiv z.B. `deckel-rho.vercel.app`.
 - Client ID und Client Secret notieren.
 
 ### 4. Umgebungsvariablen

@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
- * Deckel — visual language.
+ * Pace or Pay — visual language.
  *
  * The motif is a restaurant bill, because the pot ends up paying for a
  * team meal. Taken seriously but not literally: paper tones, dotted
@@ -135,8 +135,22 @@ body {
   border: 1px solid var(--paper-edge);
   border-radius: 2px;
   padding: 0.6rem 0.65rem;
-  font-size: 1rem; /* 16px — stops iOS zooming on focus */
   color: var(--ink);
+}
+
+/*
+ * Safety net against iOS zoom-on-focus.
+ *
+ * Mobile Safari zooms the viewport whenever a focused form control has a
+ * computed font-size below 16px -- which instantly makes a PWA feel like a
+ * website. Enforcing the floor globally means a stray `text-sm` on some
+ * future input can never reintroduce it. `max()` keeps larger sizes intact.
+ */
+input,
+select,
+textarea,
+button {
+  font-size: max(16px, 1rem);
 }
 .field:focus {
   border-color: var(--ink-soft);
@@ -144,6 +158,7 @@ body {
 }
 
 .btn {
+  font-size: 0.9375rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;

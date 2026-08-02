@@ -15,12 +15,12 @@ export function InviteShare({ inviteCode }: { inviteCode: string }) {
       ? `${window.location.origin}/gruppe/beitreten?code=${inviteCode}`
       : "";
 
-  const message = `Mach mit bei Deckel — unsere Lauf-Challenge. Mit diesem Link kommst du rein: ${link}`;
+  const message = `Mach mit bei Pace or Pay — unsere Lauf-Challenge. Mit diesem Link kommst du rein: ${link}`;
 
   async function share() {
     if (navigator.share) {
       try {
-        await navigator.share({ title: "Deckel", text: message, url: link });
+        await navigator.share({ title: "Pace or Pay", text: message, url: link });
         return;
       } catch {
         // user cancelled the share sheet -- fall through to copy

@@ -35,7 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="flex-1 flex flex-col max-w-md mx-auto w-full">
       <header className="border-b border-paper-edge px-4 py-3 flex items-center justify-between bg-paper-card">
         <Link href="/" className="text-sm font-medium tracking-tight">
-          Deckel
+          Pace or Pay
         </Link>
         <form action={signOut}>
           <button type="submit" className="btn btn-quiet text-xs">

@@ -1,5 +1,5 @@
 /**
- * Deckel rule engine.
+ * Pace or Pay rule engine.
  *
  * Pure functions only -- no I/O, no Supabase, no dates-as-strings ambiguity.
  * Everything that decides who owes what lives here so it can be unit tested

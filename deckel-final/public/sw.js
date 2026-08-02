@@ -1,5 +1,5 @@
 /*
- * Deckel service worker.
+ * Pace or Pay service worker.
  *
  * Two jobs:
  *  1. Keep the app openable without a connection. Everything here is
@@ -8,7 +8,7 @@
  *  2. Receive web push and show it.
  */
 
-const CACHE = "deckel-shell-v1";
+const CACHE = "paceorpay-shell-v2";
 const OFFLINE_URL = "/offline.html";
 
 const SHELL = [OFFLINE_URL, "/icons/icon-192.png", "/icons/icon-512.png"];
@@ -59,15 +59,15 @@ self.addEventListener("push", (event) => {
   try {
     data = event.data ? event.data.json() : {};
   } catch {
-    data = { title: "Deckel", body: event.data ? event.data.text() : "" };
+    data = { title: "Pace or Pay", body: event.data ? event.data.text() : "" };
   }
 
-  const title = data.title || "Deckel";
+  const title = data.title || "Pace or Pay";
   const options = {
     body: data.body || "",
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
-    tag: data.tag || "deckel",
+    tag: data.tag || "paceorpay",
     data: { url: data.url || "/" },
   };
 

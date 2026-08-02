@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Deckel — Team-Lauf-Challenge",
-    short_name: "Deckel",
+    name: "Pace or Pay — Team-Lauf-Challenge",
+    short_name: "Pace or Pay",
     description:
       "Wer hinter dem Besten liegt, zahlt die Differenz in den Topf — und der bezahlt das Team-Essen.",
     start_url: "/",

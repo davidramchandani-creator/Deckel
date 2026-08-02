@@ -31,7 +31,7 @@ export function Explainer({
         className="btn btn-quiet text-sm w-full justify-between"
         aria-expanded={open}
       >
-        <span>Wie funktioniert Deckel?</span>
+        <span>Wie funktioniert Pace or Pay?</span>
         <span aria-hidden="true">{open ? "−" : "+"}</span>
       </button>
 

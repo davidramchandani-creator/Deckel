@@ -3,13 +3,13 @@ import "./globals.css";
 import { ServiceWorkerRegistrar } from "@/components/pwa";
 
 export const metadata: Metadata = {
-  title: "Deckel",
+  title: "Pace or Pay",
   description:
     "Team-Lauf-Challenge — wer zurueckliegt, zahlt die Differenz in den Topf.",
-  applicationName: "Deckel",
+  applicationName: "Pace or Pay",
   appleWebApp: {
     capable: true,
-    title: "Deckel",
+    title: "Pace or Pay",
     statusBarStyle: "default",
   },
   icons: {

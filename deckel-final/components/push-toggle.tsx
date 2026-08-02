@@ -87,7 +87,7 @@ export function PushToggle({ vapidPublicKey }: { vapidPublicKey: string }) {
   if (state === "needs-install") {
     return (
       <p className="text-xs text-ink-soft">
-        Für Benachrichtigungen musst du Deckel zuerst zum Home-Bildschirm
+        Für Benachrichtigungen musst du Pace or Pay zuerst zum Home-Bildschirm
         hinzufügen: unten auf „Teilen“ tippen, dann „Zum Home-Bildschirm“.
         Danach erscheint hier der Schalter.
       </p>

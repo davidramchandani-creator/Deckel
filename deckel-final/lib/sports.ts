@@ -4,7 +4,7 @@
  * Every sport is defined by a unit and a rate:
  *
  *   - unit "km":  points = kilometres x rate   (running, cycling, swimming)
- *   - unit "min": points = minutes x rate      (strength, yoga -- no distance)
+ *   - unit "min": points = minutes x rate      (gym, yoga -- no distance)
  *
  * The catalog below is the menu; each group's admin decides which sports
  * count and at what rate. The chosen config is frozen into every period's
@@ -29,30 +29,48 @@ export interface SportDef {
 }
 
 export const SPORTS_CATALOG: SportDef[] = [
+  // --- distance sports: points per kilometre ---
   { key: "run", label: "Laufen", unit: "km", rate: 1.0,
     stravaTypes: ["Run", "TrailRun", "VirtualRun"], enabled: true },
   { key: "bike", label: "Velo", unit: "km", rate: 0.25,
-    stravaTypes: ["Ride", "VirtualRide", "GravelRide", "MountainBikeRide"], enabled: true },
+    stravaTypes: ["Ride", "VirtualRide", "GravelRide", "MountainBikeRide", "Velomobile", "Handcycle"],
+    enabled: true },
+  // E-bikes get their own, much lower rate -- a motor is not the same
+  // effort, and lumping them in with road bikes would be unfair.
+  { key: "ebike", label: "E-Bike", unit: "km", rate: 0.1,
+    stravaTypes: ["EBikeRide", "EMountainBikeRide"], enabled: false },
   { key: "swim", label: "Schwimmen", unit: "km", rate: 3.0,
     stravaTypes: ["Swim"], enabled: false },
   { key: "hike", label: "Wandern", unit: "km", rate: 0.5,
     stravaTypes: ["Hike"], enabled: false },
   { key: "walk", label: "Spazieren", unit: "km", rate: 0.3,
-    stravaTypes: ["Walk"], enabled: false },
+    stravaTypes: ["Walk", "Wheelchair"], enabled: false },
   { key: "row", label: "Rudern & Paddeln", unit: "km", rate: 0.6,
-    stravaTypes: ["Rowing", "VirtualRow", "Kayaking", "Canoeing", "StandUpPaddling"], enabled: false },
+    stravaTypes: ["Rowing", "VirtualRow", "Kayaking", "Canoeing", "StandUpPaddling"],
+    enabled: false },
   { key: "skate", label: "Skaten", unit: "km", rate: 0.35,
-    stravaTypes: ["InlineSkate", "IceSkate"], enabled: false },
-  { key: "wintersport", label: "Langlauf & Ski", unit: "km", rate: 0.5,
-    stravaTypes: ["NordicSki", "BackcountrySki", "Snowshoe", "RollerSki"], enabled: false },
-  { key: "strength", label: "Krafttraining", unit: "min", rate: 0.15,
-    stravaTypes: ["WeightTraining", "Workout", "Crossfit", "HighIntensityIntervalTraining"], enabled: false },
+    stravaTypes: ["InlineSkate", "IceSkate", "Skateboard"], enabled: false },
+  { key: "wintersport", label: "Ski & Snowboard", unit: "km", rate: 0.5,
+    stravaTypes: ["NordicSki", "BackcountrySki", "RollerSki", "Snowshoe", "AlpineSki", "Snowboard"],
+    enabled: false },
+
+  // --- time sports: points per minute ---
+  { key: "gym", label: "Kraft & Fitness", unit: "min", rate: 0.15,
+    stravaTypes: ["WeightTraining", "Workout", "Crossfit", "HighIntensityIntervalTraining", "Elliptical", "StairStepper"],
+    enabled: false },
   { key: "yoga", label: "Yoga & Pilates", unit: "min", rate: 0.1,
     stravaTypes: ["Yoga", "Pilates"], enabled: false },
   { key: "racket", label: "Racketsport", unit: "min", rate: 0.15,
-    stravaTypes: ["Tennis", "Badminton", "Squash", "Pickleball", "TableTennis", "Racquetball", "Padel"], enabled: false },
-  { key: "football", label: "Fussball & Teamsport", unit: "min", rate: 0.15,
+    stravaTypes: ["Tennis", "Badminton", "Squash", "Pickleball", "TableTennis", "Racquetball"],
+    enabled: false },
+  { key: "football", label: "Fussball", unit: "min", rate: 0.15,
     stravaTypes: ["Soccer"], enabled: false },
+  { key: "climb", label: "Klettern", unit: "min", rate: 0.15,
+    stravaTypes: ["RockClimbing"], enabled: false },
+  { key: "watersport", label: "Surfen & Segeln", unit: "min", rate: 0.12,
+    stravaTypes: ["Surfing", "Kitesurf", "Windsurf", "Sail"], enabled: false },
+  { key: "golf", label: "Golf", unit: "min", rate: 0.06,
+    stravaTypes: ["Golf"], enabled: false },
 ];
 
 /** JSON shape stored in group_settings.sports and settings_snapshot.sports. */

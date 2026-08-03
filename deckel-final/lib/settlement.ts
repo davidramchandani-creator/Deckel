@@ -121,7 +121,7 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
     await Promise.all([
       supabase.from("members").select("*").eq("group_id", membership.group_id),
       supabase.from("participations").select("*").eq("period_id", period.id),
-      supabase.from("activities").select("*").eq("period_id", period.id),
+      supabase.from("activities").select("*").eq("period_id", period.id).eq("status", "approved"),
     ]);
 
   const capChf = period.settings_snapshot.cap_chf;

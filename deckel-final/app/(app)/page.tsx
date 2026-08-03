@@ -5,6 +5,7 @@ import { Explainer } from "@/components/explainer";
 import { formatAmount, sportByKey } from "@/lib/sports";
 import { InstallPrompt } from "@/components/install-prompt";
 import { CountUp } from "@/components/count-up";
+import { PushNudge } from "@/components/push-nudge";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,10 @@ export default async function RanglistePage() {
   return (
     <div className="space-y-5">
       <InstallPrompt />
+
+      {process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && (
+        <PushNudge vapidPublicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY} />
+      )}
 
       {view.freshlySettled && (
         <Link href="/archiv" className="block">

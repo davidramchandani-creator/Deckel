@@ -58,7 +58,8 @@ export async function GET(request: NextRequest) {
     const { data: activities } = await admin
       .from("activities")
       .select("member_id, sport_type, distance_km, moving_time_s")
-      .eq("period_id", period.id);
+      .eq("period_id", period.id)
+      .eq("status", "approved");
 
     const byMember = new Map<
       string,

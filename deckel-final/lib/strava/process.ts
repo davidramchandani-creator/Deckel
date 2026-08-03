@@ -223,7 +223,8 @@ async function currentLeader(
   const { data: activities } = await admin
     .from("activities")
     .select("member_id, sport_type, distance_km, moving_time_s")
-    .eq("period_id", periodId);
+    .eq("period_id", periodId)
+    .eq("status", "approved");
 
   const { data: participations } = await admin
     .from("participations")

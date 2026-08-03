@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import type { Activity, Participation, Period } from "@/lib/types";
 import { getActiveMembership } from "@/lib/active-group";
 import { StatusSwitch } from "./status-switch";
+import { ManualForm } from "./manual-form";
+import { PendingVotes, type PendingItem } from "./pending-votes";
 import { Sheet, SectionLabel, Line, points } from "@/components/receipt";
 import { sportsFromSnapshot, totalPointsFor, sportByKey, formatAmount } from "@/lib/sports";
 
@@ -50,7 +52,12 @@ export default async function MeineAktivitaetenPage({
     );
   }
 
-  const [{ data: participation }, { data: activities }] = await Promise.all([
+  const [
+    { data: participation },
+    { data: activities },
+    { data: pendingRows },
+    { count: memberCount },
+  ] = await Promise.all([
     supabase
       .from("participations")
       .select("*")
@@ -63,7 +70,17 @@ export default async function MeineAktivitaetenPage({
       .eq("period_id", period.id)
       .eq("member_id", member.id)
       .order("started_at", { ascending: false })
-      .returns<Activity[]>(),
+      .returns<Activity[]>(), // includes pending/rejected so I can see my own
+    supabase
+      .from("activities")
+      .select("*, members(display_name), activity_votes(member_id, approve)")
+      .eq("period_id", period.id)
+      .eq("status", "pending")
+      .order("started_at", { ascending: false }),
+    supabase
+      .from("members")
+      .select("id", { count: "exact", head: true })
+      .eq("group_id", active.groupId),
   ]);
 
   const status = participation?.status ?? "active";
@@ -71,12 +88,51 @@ export default async function MeineAktivitaetenPage({
   const periodStarted = new Date(period.starts_on) <= new Date();
   const sports = sportsFromSnapshot(snapshot);
 
-  const scorables = (activities ?? []).map((a) => ({
+  // Only confirmed entries count toward the balance shown here.
+  const scorables = (activities ?? [])
+    .filter((a) => (a as Activity & { status?: string }).status !== "pending" &&
+                   (a as Activity & { status?: string }).status !== "rejected")
+    .map((a) => ({
     sportKey: a.sport_type,
     distanceKm: Number(a.distance_km),
     movingTimeMin: (a.moving_time_s ?? 0) / 60,
   }));
   const myPoints = totalPointsFor(scorables, sports);
+
+  const others = Math.max(0, (memberCount ?? 1) - 1);
+  const pendingItems: PendingItem[] = (
+    (pendingRows ?? []) as unknown as (Activity & {
+      note: string | null;
+      members: { display_name: string } | { display_name: string }[] | null;
+      activity_votes: { member_id: string; approve: boolean }[];
+    })[]
+  ).map((row) => {
+    const rel = Array.isArray(row.members) ? row.members[0] : row.members;
+    const votes = row.activity_votes ?? [];
+    const isMine = row.member_id === member.id;
+    // The owner never counts as a voter, so the bar is over the others.
+    const ownerExcluded = Math.max(0, (memberCount ?? 1) - 1);
+    return {
+      id: row.id,
+      displayName: rel?.display_name ?? "?",
+      sportLabel: sportByKey(row.sport_type, sports)?.label ?? row.sport_type,
+      amount: formatAmount(
+        {
+          sportKey: row.sport_type,
+          distanceKm: Number(row.distance_km),
+          movingTimeMin: (row.moving_time_s ?? 0) / 60,
+        },
+        sports
+      ),
+      note: row.note,
+      startedAt: row.started_at,
+      isMine,
+      myVote: votes.find((v) => v.member_id === member.id)?.approve ?? null,
+      approvals: votes.filter((v) => v.approve).length,
+      rejections: votes.filter((v) => !v.approve).length,
+      needed: Math.max(1, Math.ceil(ownerExcluded / 2)),
+    };
+  });
 
   // Per-sport totals for the balance card, only sports with activity.
   const perSport = sports
@@ -167,6 +223,33 @@ export default async function MeineAktivitaetenPage({
         )}
       </Sheet>
 
+      {pendingItems.length > 0 && (
+        <Sheet>
+          <SectionLabel>
+            Wartet auf Bestätigung ({pendingItems.length})
+          </SectionLabel>
+          <p className="text-xs text-ink-soft mb-3 leading-relaxed">
+            Manuelle Einträge zählen erst, wenn die Mehrheit der anderen sie
+            bestätigt hat.
+          </p>
+          <PendingVotes items={pendingItems} />
+        </Sheet>
+      )}
+
+      <Sheet>
+        <SectionLabel>Von Hand eintragen</SectionLabel>
+        <p className="text-xs text-ink-soft mb-3 leading-relaxed">
+          Für Sport ohne Strava — vergessene Uhr, Hallentraining, kaputter
+          Akku.
+        </p>
+        <ManualForm
+          periodId={period.id}
+          sports={sports}
+          periodStart={period.starts_on}
+          needsApproval={others > 0}
+        />
+      </Sheet>
+
       <Sheet>
         <SectionLabel>Diese Periode</SectionLabel>
         {!activities || activities.length === 0 ? (
@@ -194,7 +277,11 @@ export default async function MeineAktivitaetenPage({
                         day: "2-digit",
                         month: "2-digit",
                       })}
-                      {a.source === "manual" && " · Altbestand, von Hand"}
+                      {a.source === "manual" && " · von Hand"}
+                      {(a as Activity & { status?: string }).status === "pending" &&
+                        " · wartet auf Bestätigung"}
+                      {(a as Activity & { status?: string }).status === "rejected" &&
+                        " · abgelehnt, zählt nicht"}
                     </span>
                   }
                 />

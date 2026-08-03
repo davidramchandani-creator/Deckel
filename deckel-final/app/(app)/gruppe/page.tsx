@@ -5,6 +5,7 @@ import { getMemberships } from "@/lib/active-group";
 import { WebhookButton } from "./webhook-button";
 import { InviteShare } from "./invite";
 import { RulesForm } from "./rules-form";
+import { ApplyRulesNow } from "./apply-now";
 import { GroupSwitcher } from "./group-switcher";
 import { LeaveGroup } from "./leave-group";
 import { PromoteButton } from "./promote";
@@ -143,12 +144,17 @@ export default async function GruppePage() {
         <Sheet>
           <SectionLabel>Regeln</SectionLabel>
           {isAdmin ? (
-            <RulesForm
-              groupId={active.groupId}
-              periodDays={settings.period_days}
-              capChf={Number(settings.cap_chf)}
-              sports={(settings as GroupSettings & { sports?: SportsConfig | null }).sports ?? null}
-            />
+            <>
+              <RulesForm
+                groupId={active.groupId}
+                periodDays={settings.period_days}
+                capChf={Number(settings.cap_chf)}
+                sports={(settings as GroupSettings & { sports?: SportsConfig | null }).sports ?? null}
+              />
+              <div className="rule-dashed mt-4 pt-3">
+                <ApplyRulesNow groupId={active.groupId} />
+              </div>
+            </>
           ) : (
             <div className="text-sm">
               <Line left="Periode" right={`${settings.period_days} Tage`} />

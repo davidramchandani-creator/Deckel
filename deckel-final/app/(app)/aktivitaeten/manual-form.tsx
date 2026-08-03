@@ -76,8 +76,11 @@ export function ManualForm({
             <input
               type="number"
               name="value"
-              step={sport?.unit === "min" ? "1" : "0.1"}
-              min="0.1"
+              /* min und step muessen zur Einheit passen, sonst lehnt der
+                 Browser gueltige Eingaben ab (min=0.1 mit step=1 machte
+                 jede ganze Minutenzahl ungueltig). */
+              step={sport?.unit === "min" ? "1" : "any"}
+              min={sport?.unit === "min" ? "1" : "0.1"}
               inputMode="decimal"
               required
               className="field num"

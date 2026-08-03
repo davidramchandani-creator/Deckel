@@ -97,7 +97,12 @@ export function RulesForm({
                     type="number"
                     name={`sport_${def.key}_rate`}
                     defaultValue={cfg.rate}
-                    step="0.05"
+                    /* step="any" ist Absicht: mit einem festen step prueft
+                       der Browser gueltige Werte als min + n*step, wodurch
+                       fast jeder sinnvolle Satz (1.0, 0.25, 0.15) als
+                       ungueltig abgelehnt wurde und das Formular sich nicht
+                       abschicken liess. */
+                    step="any"
                     min="0.01"
                     max="10"
                     inputMode="decimal"

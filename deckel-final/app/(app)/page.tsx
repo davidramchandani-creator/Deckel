@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getMySettlementView } from "@/lib/settlement";
 import { Line, Sheet, SectionLabel, money, points } from "@/components/receipt";
 import { Explainer } from "@/components/explainer";
-import { formatAmount, sportByKey } from "@/lib/sports";
+import { formatAmount, sportByKey, currentTier } from "@/lib/sports";
 import { InstallPrompt } from "@/components/install-prompt";
 import { CountUp } from "@/components/count-up";
 import { PushNudge } from "@/components/push-nudge";
@@ -130,6 +130,23 @@ export default async function RanglistePage() {
             </p>
           )}
 
+          {view.handicap.enabled && me.status !== "withdrawn" && (() => {
+            const t = currentTier(me.rawPoints ?? 0, view.handicap);
+            return (
+              <p className="text-xs text-ink-soft mt-2 leading-relaxed">
+                Du bist in Stufe {t.tier + 1} — deine Punkte zählen aktuell zu{" "}
+                <span className="num text-ink">{Math.round(t.factor * 100)}%</span>.
+                {t.nextAt !== null && (
+                  <>
+                    {" "}
+                    Ab <span className="num">{t.nextAt}</span> Rohpunkten wird es
+                    zäher.
+                  </>
+                )}
+              </p>
+            );
+          })()}
+
           {me.status !== "withdrawn" && me.catchUp && (
             <div className="rule-dashed mt-3 pt-3">
               <p className="text-xs text-ink-soft mb-1.5">
@@ -214,6 +231,13 @@ export default async function RanglistePage() {
                           <span className="block">
                             <span className="num text-ink-faint">
                               {points(row.points)}
+                              {view.handicap.enabled &&
+                                row.rawPoints > row.points && (
+                                  <span title="vor der Staffelung">
+                                    {" "}
+                                    (roh {row.rawPoints.toFixed(1)})
+                                  </span>
+                                )}
                             </span>
                             {view.record > 0 && row.status !== "withdrawn" && (
                               <span className="score-track block" aria-hidden="true">
@@ -311,6 +335,7 @@ export default async function RanglistePage() {
           sports={view.sports}
           cap={snapshot.cap_chf}
           currency={currency}
+          handicap={view.handicap}
         />
       </Sheet>
     </div>

@@ -10,18 +10,21 @@ import { useState } from "react";
  * leaderboard, collapsed by default, and explains it in the group's own
  * terms using their actual configured values.
  */
-import type { SportDef } from "@/lib/sports";
+import type { SportDef, HandicapConfig } from "@/lib/sports";
+import { applyHandicap } from "@/lib/sports";
 
 export function Explainer({
   periodDays,
   sports,
   cap,
   currency,
+  handicap,
 }: {
   periodDays: number;
   sports: SportDef[];
   cap: number;
   currency: string;
+  handicap?: HandicapConfig;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -76,6 +79,36 @@ export function Explainer({
               hinten du liegst.
             </p>
           </div>
+
+          {handicap?.enabled && (
+            <div>
+              <p className="text-ink font-medium mb-1">Staffelung</p>
+              <p>
+                Damit sich niemand absetzen kann, zählen Punkte mit
+                steigender Zahl weniger — wie Steuerstufen. Die ersten{" "}
+                {handicap.bracket} Punkte zählen voll, danach wird es
+                stufenweise zäher:
+              </p>
+              <ul className="mt-1.5 space-y-0.5">
+                {[1, 2, 4].map((m) => {
+                  const raw = handicap.bracket * m;
+                  return (
+                    <li key={raw} className="flex items-baseline">
+                      <span className="num">{raw} roh</span>
+                      <span className="leader" aria-hidden="true" />
+                      <span className="num">
+                        {applyHandicap(raw, handicap).toFixed(1)} effektiv
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="mt-1.5">
+                Mehr Aufwand bringt trotzdem immer mehr Punkte — nur eben
+                nicht mehr im gleichen Tempo.
+              </p>
+            </div>
+          )}
 
           <div>
             <p className="text-ink font-medium mb-1">Krank oder abgemeldet</p>

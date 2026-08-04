@@ -1,10 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { computeSettlement, currentPeriodDay, type Participant } from "@/lib/rules";
-import { sportsFromSnapshot, totalPointsFor, pointsForScorable, sportByKey, formatAmount, type SportDef } from "@/lib/sports";
+import { sportsFromSnapshot, totalPointsFor, pointsForScorable, sportByKey, formatAmount, applyHandicap, handicapFromSnapshot, rawNeededFor, type SportDef, type HandicapConfig } from "@/lib/sports";
 import type { Activity, Member, Period } from "@/lib/types";
 import { getActiveMembership } from "@/lib/active-group";
 
 export interface SettlementRow {
+  /** Punkte vor der Staffelung -- fuer die Anzeige "roh -> effektiv". */
+  rawPoints: number;
   memberId: string;
   displayName: string;
   points: number;
@@ -16,6 +18,8 @@ export interface SettlementRow {
 }
 
 export interface CatchUp {
+  /** Rohpunkte, die noetig sind -- bereits durch die Staffelung gerechnet. */
+  rawNeeded: number;
   /** Who is directly ahead of me (or null when leading). */
   aheadName: string;
   /** Points needed to pass them. */
@@ -27,6 +31,8 @@ export interface CatchUp {
 }
 
 export interface MyStanding {
+  /** Punkte vor der Staffelung -- fuer die Stufenanzeige. */
+  rawPoints: number;
   catchUp: CatchUp | null;
   memberId: string;
   displayName: string;
@@ -52,6 +58,7 @@ export interface FeedItem {
 }
 
 export interface GroupSettlementView {
+  handicap: HandicapConfig;
   /** Latest activities across the whole group, newest first. */
   feed: FeedItem[];
   /** A period settled within the last 3 days -- worth celebrating. */
@@ -127,6 +134,7 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
   const capChf = period.settings_snapshot.cap_chf;
   const periodDays = period.settings_snapshot.period_days;
   const sports = sportsFromSnapshot(period.settings_snapshot);
+  const handicap = handicapFromSnapshot(period.settings_snapshot);
 
   const activitiesByMember = new Map<string, Activity[]>();
   for (const a of (activities as Activity[] | null) ?? []) {
@@ -145,9 +153,10 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
     partByMember.set(p.member_id, { status: p.status, sick_from_day: p.sick_from_day });
   }
 
+  const rawByMember = new Map<string, number>();
   const participants: Participant[] = ((members as Member[] | null) ?? []).map((m) => {
     const memberActivities = activitiesByMember.get(m.id) ?? [];
-    const points = totalPointsFor(
+    const rawPoints = totalPointsFor(
       memberActivities.map((a) => ({
         sportKey: a.sport_type,
         distanceKm: Number(a.distance_km),
@@ -155,6 +164,11 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
       })),
       sports
     );
+    // Die Staffelung wirkt auf die Summe, nicht auf einzelne Aktivitaeten --
+    // sonst haenge das Ergebnis von der Reihenfolge ab, in der Strava
+    // liefert.
+    const points = applyHandicap(rawPoints, handicap);
+    rawByMember.set(m.id, rawPoints);
     const participation = partByMember.get(m.id);
     return {
       memberId: m.id,
@@ -170,6 +184,7 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
 
   const rows: SettlementRow[] = result.lines
     .map((line) => ({
+      rawPoints: rawByMember.get(line.memberId) ?? 0,
       memberId: line.memberId,
       displayName: memberById.get(line.memberId)?.display_name ?? "?",
       points: line.points,
@@ -201,7 +216,15 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
     const ahead = myIdx > 0 ? ranked[myIdx - 1] : null;
     if (ahead) {
       // Enough to pass, not merely tie: one tenth of a point beyond.
-      const pointsNeeded = Math.max(0.1, ahead.points - myRow.points + 0.1);
+      // Mit Staffelung reicht es nicht, die Punktdifferenz durch den Satz
+      // zu teilen: die naechsten Punkte sind ja weniger wert. Darum von
+      // effektiv auf roh zurueckrechnen und die Differenz der ROHpunkte
+      // nehmen -- sonst schlaegt der Rechner zu wenig Kilometer vor.
+      const effectiveNeeded = Math.max(0.1, ahead.points - myRow.points + 0.1);
+      const myRaw = myRow.rawPoints;
+      const rawTarget = rawNeededFor(myRow.points + effectiveNeeded, handicap);
+      const pointsNeeded = Math.max(0.1, rawTarget - myRaw);
+
       const suggestions = sports
         .filter((sp) => sp.rate > 0)
         .map((sp) => {
@@ -217,6 +240,7 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
         .map(({ label, amount }) => ({ label, amount }));
 
       catchUp = {
+        rawNeeded: pointsNeeded,
         aheadName: ahead.displayName,
         pointsNeeded,
         suggestions,
@@ -226,6 +250,7 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
   }
   const me: MyStanding | null = myRow
     ? {
+        rawPoints: myRow.rawPoints,
         catchUp,
         memberId: myRow.memberId,
         displayName: myRow.displayName,
@@ -264,6 +289,7 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
     });
 
   return {
+    handicap,
     feed,
     freshlySettled,
     sports,

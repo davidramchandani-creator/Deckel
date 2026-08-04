@@ -8,7 +8,7 @@ import {
   currentTier,
   handicapFromSnapshot,
   type HandicapConfig,
-} from "@/lib/sports";
+} from "../sports";
 
 const moderat: HandicapConfig = {
   enabled: true,

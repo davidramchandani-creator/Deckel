@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/server-admin";
 import { isAuthorizedCron } from "@/lib/cron/auth";
 import { processWebhookEvent } from "@/lib/strava/process";
 import { fetchAthleteActivities, getValidAccessToken, toActivityRow, tokenMemberForAthlete } from "@/lib/strava/client";
-import { sportsFromSnapshot, totalPointsFor } from "@/lib/sports";
+import { sportsFromSnapshot, totalPointsFor, applyHandicap, handicapFromSnapshot } from "@/lib/sports";
 import { computeSettlement, type Participant } from "@/lib/rules";
 import { sendPushToMembers } from "@/lib/push";
 import { NextResponse, type NextRequest } from "next/server";
@@ -107,6 +107,7 @@ export async function GET(request: NextRequest) {
     if (daysLeft !== 2) continue;
 
     const sports = sportsFromSnapshot(period.settings_snapshot ?? {});
+    const handicap = handicapFromSnapshot(period.settings_snapshot ?? {});
     const snapshot = period.settings_snapshot as {
       cap_chf: number;
       period_days: number;
@@ -145,7 +146,7 @@ export async function GET(request: NextRequest) {
 
     const participants: Participant[] = (allMembers ?? []).map((m) => ({
       memberId: m.id,
-      points: totalPointsFor(byMember.get(m.id) ?? [], sports),
+      points: applyHandicap(totalPointsFor(byMember.get(m.id) ?? [], sports), handicap),
       status: partBy.get(m.id)?.status ?? "active",
       sickFromDay: partBy.get(m.id)?.sickFromDay,
     }));

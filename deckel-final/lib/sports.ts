@@ -146,7 +146,6 @@ export function formatAmount(a: ScorableActivity, sports: SportDef[]): string {
   return `${a.distanceKm.toFixed(1)} km`;
 }
 
-
 /* ------------------------------------------------------------------
  * Progressive Punkte-Staffelung ("Bremse")
  *

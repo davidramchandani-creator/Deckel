@@ -35,6 +35,12 @@ export interface Period {
     bike_factor: number;
     cap_chf: number;
     currency: string;
+    sports?: Record<string, { rate: number; enabled: boolean }> | null;
+    handicap?: {
+      enabled: boolean;
+      bracket: number;
+      factors: number[];
+    } | null;
   };
   status: "open" | "settled";
   settled_at: string | null;

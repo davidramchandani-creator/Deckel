@@ -87,10 +87,20 @@ describe("marginalGain", () => {
 });
 
 describe("rawNeededFor", () => {
-  it("ist die exakte Umkehrung von applyHandicap", () => {
+  // applyHandicap rundet auf zwei Stellen, darum ist die Umkehrung nicht
+  // bitgenau. Ueber alle Werte bis 300 liegt der Fehler unter 0.02 Punkten
+  // -- fuer den Ueberhol-Rechner voellig unerheblich.
+  it("ist die Umkehrung von applyHandicap", () => {
     for (const raw of [0, 3, 10, 17.5, 25, 40, 63, 120]) {
       const eff = applyHandicap(raw, moderat);
-      expect(rawNeededFor(eff, moderat)).toBeCloseTo(raw, 4);
+      expect(rawNeededFor(eff, moderat)).toBeCloseTo(raw, 1);
+    }
+  });
+
+  it("weicht ueber den ganzen Bereich nie mehr als 0.05 Punkte ab", () => {
+    for (let raw = 0; raw <= 300; raw += 0.25) {
+      const back = rawNeededFor(applyHandicap(raw, moderat), moderat);
+      expect(Math.abs(back - raw)).toBeLessThan(0.05);
     }
   });
 

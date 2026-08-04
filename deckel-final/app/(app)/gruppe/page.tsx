@@ -10,7 +10,7 @@ import { GroupSwitcher } from "./group-switcher";
 import { LeaveGroup } from "./leave-group";
 import { PromoteButton } from "./promote";
 import { Sheet, SectionLabel, Line, money } from "@/components/receipt";
-import type { SportsConfig } from "@/lib/sports";
+import type { SportsConfig, HandicapConfig } from "@/lib/sports";
 import { PushToggle } from "@/components/push-toggle";
 
 export const dynamic = "force-dynamic";
@@ -68,6 +68,21 @@ export default async function GruppePage() {
         .eq("status", "open")
         .maybeSingle<Period>(),
     ]);
+
+  // Wer wirklich ein brauchbares Token hat -- eine gesetzte Athleten-ID
+  // allein bedeutet nicht, dass Aktivitaeten importiert werden koennen.
+  const { data: liveTokens } = await supabase
+    .from("members")
+    .select("id, strava_tokens!inner(member_id, revoked_at)")
+    .eq("group_id", active.groupId);
+  const tokenMemberIds = new Set(
+    ((liveTokens ?? []) as unknown as {
+      id: string;
+      strava_tokens: { revoked_at: string | null };
+    }[])
+      .filter((r) => r.strava_tokens?.revoked_at === null)
+      .map((r) => r.id)
+  );
 
   const isAdmin = active.role === "admin";
   const memberCount = members?.length ?? 0;
@@ -127,7 +142,11 @@ export default async function GruppePage() {
                 sub={
                   <span className="flex items-center gap-2">
                     <span className="text-ink-faint">
-                      {m.strava_athlete_id ? "Strava verbunden" : "ohne Strava"}
+                      {tokenMemberIds.has(m.id)
+                        ? "Strava verbunden"
+                        : m.strava_athlete_id
+                          ? "Strava muss neu verbunden werden"
+                          : "ohne Strava"}
                     </span>
                     {isAdmin && m.role !== "admin" && (
                       <PromoteButton memberId={m.id} />
@@ -150,6 +169,10 @@ export default async function GruppePage() {
                 periodDays={settings.period_days}
                 capChf={Number(settings.cap_chf)}
                 sports={(settings as GroupSettings & { sports?: SportsConfig | null }).sports ?? null}
+                handicap={
+                  (settings as GroupSettings & { handicap?: HandicapConfig | null })
+                    .handicap ?? null
+                }
               />
               <div className="rule-dashed mt-4 pt-3">
                 <ApplyRulesNow groupId={active.groupId} />

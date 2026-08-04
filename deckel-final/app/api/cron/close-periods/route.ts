@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/server-admin";
 import { isAuthorizedCron } from "@/lib/cron/auth";
 import { computeSettlement, type Participant } from "@/lib/rules";
-import { sportsFromSnapshot, totalPointsFor } from "@/lib/sports";
+import { sportsFromSnapshot, totalPointsFor, applyHandicap, handicapFromSnapshot } from "@/lib/sports";
 import { NextResponse, type NextRequest } from "next/server";
 import { sendPushToMembers } from "@/lib/push";
 
@@ -42,8 +42,10 @@ export async function GET(request: NextRequest) {
       cap_chf: number;
       currency: string;
       sports?: Record<string, { rate: number; enabled: boolean }> | null;
+      handicap?: { enabled: boolean; bracket: number; factors: number[] } | null;
     };
     const sports = sportsFromSnapshot(snapshot);
+    const handicap = handicapFromSnapshot(snapshot);
 
     const { data: members } = await admin
       .from("members")
@@ -86,7 +88,7 @@ export async function GET(request: NextRequest) {
       const participation = partByMember.get(m.id);
       return {
         memberId: m.id,
-        points: totalPointsFor(byMember.get(m.id) ?? [], sports),
+        points: applyHandicap(totalPointsFor(byMember.get(m.id) ?? [], sports), handicap),
         status: participation?.status ?? "active",
         sickFromDay: participation?.sickFromDay,
       };
@@ -149,6 +151,7 @@ export async function GET(request: NextRequest) {
           // Rule changes -- including which sports count -- take effect here,
           // at the period boundary, and nowhere else.
           sports: currentSettings?.sports ?? snapshot.sports ?? null,
+          handicap: currentSettings?.handicap ?? snapshot.handicap ?? null,
         },
         status: "open",
       });

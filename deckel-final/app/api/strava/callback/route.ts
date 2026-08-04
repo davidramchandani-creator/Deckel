@@ -53,7 +53,11 @@ export async function GET(request: NextRequest) {
     const tokens = await exchangeCodeForTokens(code);
     const admin = createAdminClient();
 
-    await admin.from("strava_tokens").upsert({
+    // The token MUST be stored before the athlete id is stamped anywhere.
+    // Getting this order wrong -- or ignoring the error -- leaves a member
+    // marked as connected with no token behind it: the app claims "Strava
+    // verbunden" while every activity silently fails to import.
+    const { error: tokenError } = await admin.from("strava_tokens").upsert({
       member_id: member.id,
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
@@ -62,13 +66,32 @@ export async function GET(request: NextRequest) {
       revoked_at: null, // a fresh grant heals a previously dead connection
     });
 
+    if (tokenError) {
+      console.error("Strava token could not be stored", tokenError);
+      return NextResponse.redirect(`${appUrl}/aktivitaeten?strava=token_failed`);
+    }
+
+    // Verify it is really there before telling the user they are connected.
+    const { data: stored } = await admin
+      .from("strava_tokens")
+      .select("member_id")
+      .eq("member_id", member.id)
+      .maybeSingle();
+
+    if (!stored) {
+      return NextResponse.redirect(`${appUrl}/aktivitaeten?strava=token_failed`);
+    }
+
     if (tokens.athlete?.id) {
-      // Stamp the athlete on EVERY membership of this user, so one connect
-      // scores in all their groups.
-      await admin
+      // Only now stamp the athlete on every membership of this user, so one
+      // connect scores in all their groups.
+      const { error: memberError } = await admin
         .from("members")
         .update({ strava_athlete_id: tokens.athlete.id })
         .eq("user_id", user.id);
+      if (memberError) {
+        console.error("athlete id could not be stamped", memberError);
+      }
     }
 
     return NextResponse.redirect(`${appUrl}/aktivitaeten?strava=connected`);

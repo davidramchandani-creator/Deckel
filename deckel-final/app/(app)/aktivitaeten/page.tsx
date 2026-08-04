@@ -157,6 +157,15 @@ export default async function MeineAktivitaetenPage({
           </p>
         </Sheet>
       )}
+      {params.strava === "token_failed" && (
+        <Sheet className="border-accent-soft">
+          <p className="text-sm text-accent leading-relaxed">
+            Die Verbindung zu Strava konnte nicht gespeichert werden. Bitte
+            nochmal auf &bdquo;Mit Strava verbinden&ldquo; tippen — wenn es wieder nicht
+            klappt, sag Dave Bescheid.
+          </p>
+        </Sheet>
+      )}
       {params.strava === "denied" && (
         <Sheet>
           <p className="text-sm text-accent">
@@ -188,12 +197,13 @@ export default async function MeineAktivitaetenPage({
 
       {stravaStatus === "revoked" && (
         <Sheet className="border-accent-soft">
-          <SectionLabel>Strava-Verbindung unterbrochen</SectionLabel>
+          <SectionLabel>Strava neu verbinden</SectionLabel>
           <p className="text-sm text-ink-soft mb-2 leading-relaxed">
-            Strava akzeptiert den Zugriff nicht mehr — das passiert nach einer
-            Passwortänderung oder wenn der Zugriff in Strava widerrufen wurde.
-            Seither zählen deine Aktivitäten nicht. Einmal neu verbinden
-            genügt.
+            Deine Strava-Verbindung ist nicht mehr gültig — entweder wurde der
+            Zugriff in Strava widerrufen, das Passwort geändert, oder die
+            Verbindung wurde damals nicht sauber gespeichert. Seither zählen
+            deine Aktivitäten nicht. Einmal neu verbinden genügt, danach wird
+            auch Vergangenes der laufenden Periode nachgeholt.
           </p>
           <a href="/api/strava/authorize" className="btn btn-primary w-full">
             Neu verbinden
@@ -203,7 +213,10 @@ export default async function MeineAktivitaetenPage({
 
       <Sheet>
         <SectionLabel>Strava</SectionLabel>
-        {member.strava_athlete_id ? (
+        {/* Absichtlich am Token festgemacht, nicht an der Athleten-ID: eine
+            gesetzte ID ohne Token bedeutet, dass nichts importiert werden
+            kann -- die App darf dann nicht "verbunden" behaupten. */}
+        {stravaStatus === "connected" ? (
           <p className="text-sm text-ink-soft leading-relaxed">
             Verbunden. Läufe und Fahrten erscheinen automatisch, meist innert
             Minuten. Löschst du eine Aktivität in Strava, verschwindet sie auch

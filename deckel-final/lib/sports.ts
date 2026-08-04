@@ -145,3 +145,135 @@ export function formatAmount(a: ScorableActivity, sports: SportDef[]): string {
   if (sport?.unit === "min") return `${Math.round(a.movingTimeMin)} min`;
   return `${a.distanceKm.toFixed(1)} km`;
 }
+
+
+/* ------------------------------------------------------------------
+ * Progressive Punkte-Staffelung ("Bremse")
+ *
+ * Ziel: niemand soll davonziehen koennen. Je hoeher die eigene
+ * Punktzahl, desto weniger bringt der naechste Punkt -- nach demselben
+ * Prinzip wie Steuerstufen.
+ *
+ * Bewusst nur von der EIGENEN Rohpunktzahl abhaengig, nicht vom Abstand
+ * zu anderen. Dadurch ist der Wert einer Aktivitaet vorhersehbar und
+ * aendert sich nie rueckwirkend, wenn jemand anderes etwas eintraegt.
+ * ------------------------------------------------------------------ */
+
+export interface HandicapConfig {
+  enabled: boolean;
+  /** Groesse einer Stufe in Rohpunkten. */
+  bracket: number;
+  /** Faktor je Stufe. Der letzte Wert gilt fuer alles darueber. */
+  factors: number[];
+}
+
+export const HANDICAP_PRESETS: Record<string, number[]> = {
+  sanft: [1, 0.85, 0.7, 0.55],
+  moderat: [1, 0.75, 0.5, 0.25],
+  stark: [1, 0.6, 0.35, 0.15],
+};
+
+export const DEFAULT_HANDICAP: HandicapConfig = {
+  enabled: false,
+  bracket: 10,
+  factors: HANDICAP_PRESETS.moderat,
+};
+
+export function handicapFromSnapshot(snapshot: {
+  handicap?: Partial<HandicapConfig> | null;
+}): HandicapConfig {
+  const h = snapshot.handicap;
+  if (!h || !h.enabled) return { ...DEFAULT_HANDICAP, enabled: false };
+  return {
+    enabled: true,
+    bracket: h.bracket && h.bracket > 0 ? h.bracket : DEFAULT_HANDICAP.bracket,
+    factors:
+      Array.isArray(h.factors) && h.factors.length > 0
+        ? h.factors
+        : DEFAULT_HANDICAP.factors,
+  };
+}
+
+/**
+ * Rechnet Rohpunkte in effektive Punkte um.
+ *
+ * Streng monoton steigend: mehr Rohpunkte ergeben immer mehr effektive
+ * Punkte. Das ist die entscheidende Eigenschaft -- ohne sie gaebe es
+ * wieder eine tote Zone, in der Anstrengung nichts mehr bringt.
+ */
+export function applyHandicap(rawPoints: number, cfg: HandicapConfig): number {
+  if (!cfg.enabled || rawPoints <= 0) return Math.max(0, rawPoints);
+
+  let remaining = rawPoints;
+  let effective = 0;
+  let tier = 0;
+
+  while (remaining > 0) {
+    const factor = cfg.factors[Math.min(tier, cfg.factors.length - 1)];
+    const slice = Math.min(remaining, cfg.bracket);
+    effective += slice * factor;
+    remaining -= slice;
+    tier++;
+  }
+
+  return Math.round(effective * 100) / 100;
+}
+
+/** Wieviel effektive Punkte bringen die naechsten `delta` Rohpunkte? */
+export function marginalGain(
+  currentRaw: number,
+  delta: number,
+  cfg: HandicapConfig
+): number {
+  return (
+    Math.round(
+      (applyHandicap(currentRaw + delta, cfg) - applyHandicap(currentRaw, cfg)) * 100
+    ) / 100
+  );
+}
+
+/**
+ * Umkehrung: wieviel ROHpunkte braucht es, um `targetEffective` effektive
+ * Punkte zu erreichen? Wird fuer den Ueberhol-Rechner gebraucht -- der
+ * muss ja sagen, wieviele Kilometer noetig sind, nicht wieviele Punkte.
+ */
+export function rawNeededFor(targetEffective: number, cfg: HandicapConfig): number {
+  if (!cfg.enabled) return targetEffective;
+  if (targetEffective <= 0) return 0;
+
+  let remaining = targetEffective;
+  let raw = 0;
+  let tier = 0;
+
+  while (remaining > 0) {
+    const factor = cfg.factors[Math.min(tier, cfg.factors.length - 1)];
+    const tierCapacity = cfg.bracket * factor;
+    if (remaining <= tierCapacity) {
+      raw += remaining / factor;
+      remaining = 0;
+    } else {
+      raw += cfg.bracket;
+      remaining -= tierCapacity;
+    }
+    tier++;
+    if (tier > 1000) break; // Sicherheitsnetz gegen Endlosschleife
+  }
+
+  return Math.round(raw * 100) / 100;
+}
+
+/** Die aktuelle Stufe (0-basiert) und ihr Faktor, fuer die Anzeige. */
+export function currentTier(
+  rawPoints: number,
+  cfg: HandicapConfig
+): { tier: number; factor: number; nextAt: number | null } {
+  if (!cfg.enabled) return { tier: 0, factor: 1, nextAt: null };
+  const tier = Math.floor(rawPoints / cfg.bracket);
+  const factor = cfg.factors[Math.min(tier, cfg.factors.length - 1)];
+  const isLast = tier >= cfg.factors.length - 1;
+  return {
+    tier,
+    factor,
+    nextAt: isLast ? null : (tier + 1) * cfg.bracket,
+  };
+}

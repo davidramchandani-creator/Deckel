@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/server-admin";
 import { fetchActivity, getValidAccessToken, toActivityRow, tokenMemberForAthlete } from "@/lib/strava/client";
-import { sportsFromSnapshot } from "@/lib/sports";
+import { sportsFromSnapshot, handicapFromSnapshot, applyHandicap } from "@/lib/sports";
 import { computeSettlement, type Participant } from "@/lib/rules";
 import { totalPointsFor } from "@/lib/sports";
 import { sendPushToMembers } from "@/lib/push";
@@ -122,7 +122,19 @@ export async function processWebhookEvent(eventId: string): Promise<void> {
 
     const tokenMemberId = await tokenMemberForAthlete(admin, event.owner_id);
     if (!tokenMemberId) {
-      throw new Error(`no usable token for athlete ${event.owner_id}`);
+      // Not transient: this athlete is marked as connected but has no
+      // usable token, so retrying forever would only clog the queue. Mark
+      // it handled with a clear reason -- my_strava_status() will show the
+      // person a "reconnect" banner, and the nightly sync picks the
+      // activity up once they do.
+      await admin
+        .from("strava_webhook_events")
+        .update({
+          processed_at: new Date().toISOString(),
+          process_error: `kein Token fuer Athlet ${event.owner_id} -- neu verbinden noetig`,
+        })
+        .eq("id", eventId);
+      return;
     }
     const accessToken = await getValidAccessToken(admin, tokenMemberId);
     const activity = await fetchActivity(accessToken, event.object_id);
@@ -212,8 +224,10 @@ async function currentLeader(
     cap_chf: number;
     period_days: number;
     sports?: Record<string, { rate: number; enabled: boolean }> | null;
+    handicap?: { enabled: boolean; bracket: number; factors: number[] } | null;
   };
   const sports = sportsFromSnapshot(snapshot);
+  const handicap = handicapFromSnapshot(snapshot);
 
   const { data: members } = await admin
     .from("members")
@@ -256,7 +270,7 @@ async function currentLeader(
     const part = partByMember.get(m.id);
     return {
       memberId: m.id,
-      points: totalPointsFor(byMember.get(m.id) ?? [], sports),
+      points: applyHandicap(totalPointsFor(byMember.get(m.id) ?? [], sports), handicap),
       status: part?.status ?? "active",
       sickFromDay: part?.sickFromDay,
     };

@@ -53,12 +53,29 @@ export async function updateGroupRules(
     return { status: "error", message: "Mindestens eine Sportart muss aktiv sein." };
   }
 
+  // Staffelung
+  const { HANDICAP_PRESETS, DEFAULT_HANDICAP } = await import("@/lib/sports");
+  const handicapOn = formData.get("handicap_enabled") === "on";
+  const preset = String(formData.get("handicap_preset") ?? "moderat");
+  const bracket = Number(formData.get("handicap_bracket") ?? DEFAULT_HANDICAP.bracket);
+
+  if (handicapOn && (!Number.isFinite(bracket) || bracket < 1 || bracket > 200)) {
+    return { status: "error", message: "Stufengrösse muss zwischen 1 und 200 liegen." };
+  }
+
+  const handicap = {
+    enabled: handicapOn,
+    bracket: handicapOn ? bracket : DEFAULT_HANDICAP.bracket,
+    factors: HANDICAP_PRESETS[preset] ?? HANDICAP_PRESETS.moderat,
+  };
+
   const supabase = await createClient();
-  const { error } = await supabase.rpc("update_group_rules_v2", {
+  const { error } = await supabase.rpc("update_group_rules_v3", {
     p_group_id: groupId,
     p_period_days: periodDays,
     p_cap_chf: capChf,
     p_sports: sports,
+    p_handicap: handicap,
   });
   if (error) return { status: "error", message: error.message };
 

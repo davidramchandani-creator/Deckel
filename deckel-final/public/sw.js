@@ -8,7 +8,7 @@
  *  2. Receive web push and show it.
  */
 
-const CACHE = "paceorpay-shell-v3";
+const CACHE = "paceorpay-shell-v5";
 const OFFLINE_URL = "/offline.html";
 
 const SHELL = [OFFLINE_URL, "/icons/icon-192.png", "/icons/icon-512.png"];

@@ -329,6 +329,19 @@ export function effortFactor(
   return zoneFactor(fraction / hrReference, EFFORT_ZONES_RATIO);
 }
 
+/**
+ * Der Faktor in Worten. Die Zahl allein sagt niemandem etwas -- "×0.85"
+ * wird erst zu einer Information, wenn dabei steht, dass die Einheit
+ * lockerer war als eine normale Einheit derselben Sportart.
+ */
+export function effortLabel(factor: number): string {
+  if (factor <= 0.75) return "sehr locker";
+  if (factor < 1) return "locker";
+  if (factor === 1) return "normal";
+  if (factor < 1.35) return "hart";
+  return "sehr hart";
+}
+
 /** Points for one activity under the given sports config. Unknown sports score 0. */
 export function pointsForScorable(
   a: ScorableActivity,
@@ -348,6 +361,61 @@ export function totalPointsFor(
   profile?: HeartRateProfile | null
 ): number {
   return activities.reduce((sum, a) => sum + pointsForScorable(a, sports, profile), 0);
+}
+
+/**
+ * Dieselbe Rechnung wie pointsForScorable(), aber mit offengelegten
+ * Zwischenschritten.
+ *
+ * Eine blosse Punktzahl ist in einer Wette um Geld zu wenig: wer 40
+ * Minuten Kraft macht und weniger Punkte bekommt als erwartet, muss sehen
+ * koennen woran das lag -- und dasselbe bei den anderen, sonst entsteht
+ * der Verdacht, die Rangliste rechne heimlich anders. Darum liefert diese
+ * Funktion genau die Groessen, die in die Zeile gehoeren: Menge, Satz,
+ * gemessener Puls und der daraus folgende Faktor.
+ */
+export interface ScoreBreakdown {
+  sport: SportDef | null;
+  /** Menge in der Einheit der Sportart (km oder min). */
+  amount: number;
+  /** Punkte pro Einheit, wie von der Gruppe eingestellt. */
+  rate: number;
+  /** Ø-Puls dieser Einheit, falls gemessen. */
+  avgHeartrate: number | null;
+  /** Zaehlt der Puls bei dieser Sportart ueberhaupt mit? */
+  usesHeartrate: boolean;
+  /** Anstrengungsfaktor; 1, wenn neutral oder nicht anwendbar. */
+  factor: number;
+  points: number;
+}
+
+export function explainScorable(
+  a: ScorableActivity,
+  sports: SportDef[],
+  profile?: HeartRateProfile | null
+): ScoreBreakdown {
+  const sport = sportByKey(a.sportKey, sports);
+  const isKm = sport?.unit === "km";
+  const amount = isKm ? a.distanceKm : a.movingTimeMin;
+  const avgHeartrate =
+    a.avgHeartrate != null && a.avgHeartrate > 0 ? a.avgHeartrate : null;
+  // Der Puls wirkt nur dort, wo Zeit die einzige Groesse ist -- bei
+  // Kilometern regelt die Distanz die Wertung schon selbst.
+  const usesHeartrate =
+    sport != null && sport.unit === "min" && sport.hrReference != null;
+  const factor = usesHeartrate
+    ? effortFactor(avgHeartrate, profile, sport!.hrReference)
+    : 1;
+
+  return {
+    sport,
+    amount,
+    rate: sport?.rate ?? 0,
+    avgHeartrate,
+    usesHeartrate,
+    factor,
+    points: pointsForScorable(a, sports, profile),
+  };
 }
 
 /** "12.5 km" or "45 min" depending on the sport's unit. */

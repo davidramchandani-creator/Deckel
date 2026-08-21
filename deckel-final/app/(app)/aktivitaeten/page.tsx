@@ -5,7 +5,15 @@ import { StatusSwitch } from "./status-switch";
 import { ManualForm } from "./manual-form";
 import { PendingVotes, type PendingItem } from "./pending-votes";
 import { Sheet, SectionLabel, Line, points } from "@/components/receipt";
-import { sportsFromSnapshot, totalPointsFor, sportByKey, formatAmount } from "@/lib/sports";
+import {
+  sportsFromSnapshot,
+  totalPointsFor,
+  explainScorable,
+  sportByKey,
+  formatAmount,
+  type HeartRateProfile,
+} from "@/lib/sports";
+import { ScoreNote } from "@/components/score-note";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +37,7 @@ export default async function MeineAktivitaetenPage({
   const [{ data: member }, { data: stravaStatus }] = await Promise.all([
     supabase
       .from("members")
-      .select("id, group_id, strava_athlete_id")
+      .select("id, group_id, strava_athlete_id, resting_hr, max_hr")
       .eq("id", active.memberId)
       .maybeSingle(),
     supabase.rpc("my_strava_status"),
@@ -88,6 +96,14 @@ export default async function MeineAktivitaetenPage({
   const periodStarted = new Date(period.starts_on) <= new Date();
   const sports = sportsFromSnapshot(snapshot);
 
+  // Das eigene Puls-Profil muss hier mit, sonst rechnet diese Seite eine
+  // andere Punktzahl als die Rangliste -- und zwei Zahlen fuer dieselbe
+  // Sache sind schlimmer als gar keine.
+  const myProfile: HeartRateProfile = {
+    restingHr: member.resting_hr ?? null,
+    maxHr: member.max_hr ?? null,
+  };
+
   // Only confirmed entries count toward the balance shown here.
   const scorables = (activities ?? [])
     .filter((a) => (a as Activity & { status?: string }).status !== "pending" &&
@@ -96,8 +112,9 @@ export default async function MeineAktivitaetenPage({
     sportKey: a.sport_type,
     distanceKm: Number(a.distance_km),
     movingTimeMin: (a.moving_time_s ?? 0) / 60,
+    avgHeartrate: a.avg_heartrate ?? null,
   }));
-  const myPoints = totalPointsFor(scorables, sports);
+  const myPoints = totalPointsFor(scorables, sports, myProfile);
 
   const others = Math.max(0, (memberCount ?? 1) - 1);
   const pendingItems: PendingItem[] = (
@@ -141,12 +158,22 @@ export default async function MeineAktivitaetenPage({
       if (mine.length === 0) return null;
       const km = mine.reduce((s, a) => s + a.distanceKm, 0);
       const min = mine.reduce((s, a) => s + a.movingTimeMin, 0);
+      // Ø-Puls nur ueber die Einheiten, bei denen ueberhaupt gemessen
+      // wurde -- ein fehlender Gurt darf den Schnitt nicht druecken.
+      const withHr = mine.filter((a) => (a.avgHeartrate ?? 0) > 0);
       return {
         label: sp.label,
         amount: sp.unit === "km" ? `${km.toFixed(1)} km` : `${Math.round(min)} min`,
+        points: totalPointsFor(mine, sports, myProfile),
+        avgHr:
+          withHr.length > 0
+            ? Math.round(
+                withHr.reduce((s, a) => s + (a.avgHeartrate ?? 0), 0) / withHr.length
+              )
+            : null,
       };
     })
-    .filter((x): x is { label: string; amount: string } => x !== null);
+    .filter((x): x is NonNullable<typeof x> => x !== null);
 
   return (
     <div className="space-y-5">
@@ -179,7 +206,22 @@ export default async function MeineAktivitaetenPage({
         <SectionLabel>Deine Bilanz · {active.groupName}</SectionLabel>
         <Line emphasis left="Punkte" right={points(myPoints)} />
         {perSport.map((row) => (
-          <Line key={row.label} left={row.label} right={row.amount} />
+          <Line
+            key={row.label}
+            left={row.label}
+            right={points(row.points)}
+            sub={
+              <span className="text-ink-faint">
+                {row.amount}
+                {row.avgHr != null && (
+                  <>
+                    {" · Ø "}
+                    <span className="num">{row.avgHr}</span> bpm
+                  </>
+                )}
+              </span>
+            }
+          />
         ))}
         {perSport.length === 0 && (
           <p className="text-xs text-ink-soft">Noch keine Aktivität in dieser Periode.</p>
@@ -272,34 +314,47 @@ export default async function MeineAktivitaetenPage({
           </p>
         ) : (
           <ul className="text-sm">
-            {activities.map((a) => (
-              <li key={a.id} className="rule-single first:border-t-0">
-                <Line
-                  left={sportByKey(a.sport_type, sports)?.label ?? a.sport_type}
-                  right={formatAmount(
-                    {
-                      sportKey: a.sport_type,
-                      distanceKm: Number(a.distance_km),
-                      movingTimeMin: (a.moving_time_s ?? 0) / 60,
-                    },
-                    sports
-                  )}
-                  sub={
-                    <span className="text-ink-faint">
-                      {new Date(a.started_at).toLocaleDateString("de-CH", {
-                        day: "2-digit",
-                        month: "2-digit",
-                      })}
-                      {a.source === "manual" && " · von Hand"}
-                      {(a as Activity & { status?: string }).status === "pending" &&
-                        " · wartet auf Bestätigung"}
-                      {(a as Activity & { status?: string }).status === "rejected" &&
-                        " · abgelehnt, zählt nicht"}
-                    </span>
-                  }
-                />
-              </li>
-            ))}
+            {activities.map((a) => {
+              const state = (a as Activity & { status?: string }).status;
+              const zaehlt = state !== "pending" && state !== "rejected";
+              const b = explainScorable(
+                {
+                  sportKey: a.sport_type,
+                  distanceKm: Number(a.distance_km),
+                  movingTimeMin: (a.moving_time_s ?? 0) / 60,
+                  avgHeartrate: a.avg_heartrate ?? null,
+                },
+                sports,
+                myProfile
+              );
+              return (
+                <li key={a.id} className="rule-single first:border-t-0">
+                  <Line
+                    left={b.sport?.label ?? a.sport_type}
+                    right={zaehlt ? points(b.points) : "—"}
+                    sub={
+                      <span className="block text-ink-faint">
+                        <span className="block">
+                          {new Date(a.started_at).toLocaleDateString("de-CH", {
+                            day: "2-digit",
+                            month: "2-digit",
+                          })}
+                          {a.source === "manual" && " · von Hand"}
+                          {state === "pending" && " · wartet auf Bestätigung"}
+                          {state === "rejected" && " · abgelehnt, zählt nicht"}
+                        </span>
+                        {/* Die Rechnung dazu -- damit eine ueberraschend
+                            tiefe Punktzahl sofort erklaerbar ist statt
+                            geraten werden muss. */}
+                        <span className="block text-[11px] leading-snug">
+                          <ScoreNote b={b} />
+                        </span>
+                      </span>
+                    }
+                  />
+                </li>
+              );
+            })}
           </ul>
         )}
       </Sheet>

@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { computeSettlement, currentPeriodDay, type Participant } from "@/lib/rules";
-import { sportsFromSnapshot, totalPointsFor, pointsForScorable, sportByKey, formatAmount, applyHandicap, handicapFromSnapshot, rawNeededFor, type SportDef, type HandicapConfig, type HeartRateProfile } from "@/lib/sports";
+import { sportsFromSnapshot, totalPointsFor, pointsForScorable, explainScorable, sportByKey, formatAmount, applyHandicap, handicapFromSnapshot, rawNeededFor, type SportDef, type HandicapConfig, type HeartRateProfile } from "@/lib/sports";
 import type { Activity, Member, Period } from "@/lib/types";
 import { getActiveMembership } from "@/lib/active-group";
 
@@ -15,6 +15,13 @@ export interface SettlementRow {
   owed: number;
   isRecordHolder: boolean;
   activities: Activity[];
+  /**
+   * Ruhe-/Maximalpuls dieser Person. Wird mitgeliefert, damit die
+   * aufgeklappte Zeile die Punkte mit genau demselben Massstab herleiten
+   * kann, mit dem sie berechnet wurden -- sonst zeigt die Erklaerung eine
+   * andere Zahl als die Rangliste.
+   */
+  profile: HeartRateProfile | null;
 }
 
 export interface CatchUp {
@@ -53,6 +60,10 @@ export interface FeedItem {
   sportLabel: string;
   amount: string;
   points: number;
+  /** Ø-Puls der Einheit, falls gemessen -- sonst null. */
+  avgHeartrate: number | null;
+  /** Anstrengungsfaktor, nur gesetzt wo er auch gewirkt hat. */
+  factor: number | null;
   daysAgo: number;
   isMe: boolean;
 }
@@ -207,6 +218,7 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
       activities: (activitiesByMember.get(line.memberId) ?? []).sort(
         (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime()
       ),
+      profile: profileByMember.get(line.memberId) ?? null,
     }))
     .sort((a, b) => b.points - a.points);
 
@@ -291,11 +303,17 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
         movingTimeMin: (a.moving_time_s ?? 0) / 60,
         avgHeartrate: a.avg_heartrate ?? null,
       };
+      const b = explainScorable(scorable, sports, profileByMember.get(a.member_id));
       return {
         displayName: memberById2.get(a.member_id)?.display_name ?? "?",
         sportLabel: sportByKey(a.sport_type, sports)?.label ?? a.sport_type,
         amount: formatAmount(scorable, sports),
-        points: pointsForScorable(scorable, sports, profileByMember.get(a.member_id)),
+        points: b.points,
+        avgHeartrate: b.avgHeartrate,
+        // Nur wo der Puls wirklich mitgerechnet hat -- sonst waere die
+        // Anzeige eines Faktors eine Behauptung ueber etwas, das gar nicht
+        // stattgefunden hat.
+        factor: b.usesHeartrate && b.avgHeartrate != null ? b.factor : null,
         daysAgo: Math.floor((nowMs - new Date(a.started_at).getTime()) / 86400000),
         isMe: a.member_id === membership.id,
       };

@@ -2,7 +2,8 @@ import Link from "next/link";
 import { getMySettlementView } from "@/lib/settlement";
 import { Line, Sheet, SectionLabel, money, points } from "@/components/receipt";
 import { Explainer } from "@/components/explainer";
-import { formatAmount, sportByKey, currentTier } from "@/lib/sports";
+import { formatAmount, sportByKey, currentTier, explainScorable, effortLabel } from "@/lib/sports";
+import { ScoreNote } from "@/components/score-note";
 import { InstallPrompt } from "@/components/install-prompt";
 import { CountUp } from "@/components/count-up";
 import { PushNudge } from "@/components/push-nudge";
@@ -257,31 +258,42 @@ export default async function RanglistePage() {
                       />
                     </summary>
 
-                    <div className="pl-3 pb-2 text-xs text-ink-soft space-y-1">
+                    <div className="pl-3 pb-2 text-xs text-ink-soft space-y-1.5">
                       {row.activities.length === 0 ? (
                         <p>Keine Aktivitäten in dieser Periode.</p>
                       ) : (
-                        row.activities.map((a) => (
-                          <div key={a.id} className="flex items-baseline">
-                            <span>
-                              {sportByKey(a.sport_type, view.sports)?.label ?? a.sport_type}
-                              {a.source === "manual" && (
-                                <span className="text-ink-faint"> · von Hand</span>
-                              )}
-                            </span>
-                            <span className="leader" aria-hidden="true" />
-                            <span className="num">
-                              {formatAmount(
-                                {
-                                  sportKey: a.sport_type,
-                                  distanceKm: Number(a.distance_km),
-                                  movingTimeMin: (a.moving_time_s ?? 0) / 60,
-                                },
-                                view.sports
-                              )}
-                            </span>
-                          </div>
-                        ))
+                        row.activities.map((a) => {
+                          // Jede Zeile zeigt ihre eigene Rechnung. Ohne das
+                          // bleibt unklar, warum jemand vorne liegt -- und
+                          // genau darum geht es hier.
+                          const b = explainScorable(
+                            {
+                              sportKey: a.sport_type,
+                              distanceKm: Number(a.distance_km),
+                              movingTimeMin: (a.moving_time_s ?? 0) / 60,
+                              avgHeartrate: a.avg_heartrate ?? null,
+                            },
+                            view.sports,
+                            row.profile
+                          );
+                          return (
+                            <div key={a.id}>
+                              <div className="flex items-baseline">
+                                <span>
+                                  {b.sport?.label ?? a.sport_type}
+                                  {a.source === "manual" && (
+                                    <span className="text-ink-faint"> · von Hand</span>
+                                  )}
+                                </span>
+                                <span className="leader" aria-hidden="true" />
+                                <span className="num">{points(b.points)}</span>
+                              </div>
+                              <div className="text-[11px] leading-snug">
+                                <ScoreNote b={b} />
+                              </div>
+                            </div>
+                          );
+                        })
                       )}
                     </div>
                   </details>
@@ -311,19 +323,33 @@ export default async function RanglistePage() {
             <p className="label mb-2">Zuletzt</p>
             <ul className="text-xs text-ink-soft space-y-1">
               {view.feed.map((item, i) => (
-                <li key={i} className="flex items-baseline">
-                  <span className={item.isMe ? "text-ink" : ""}>
-                    {item.isMe ? "Du" : item.displayName} · {item.sportLabel}{" "}
-                    {item.amount}
-                  </span>
-                  <span className="leader" aria-hidden="true" />
-                  <span className="num">
-                    {item.daysAgo === 0
-                      ? "heute"
-                      : item.daysAgo === 1
-                        ? "gestern"
-                        : `vor ${item.daysAgo} Tagen`}
-                  </span>
+                <li key={i}>
+                  <div className="flex items-baseline">
+                    <span className={item.isMe ? "text-ink" : ""}>
+                      {item.isMe ? "Du" : item.displayName} · {item.sportLabel}{" "}
+                      {item.amount}
+                    </span>
+                    <span className="leader" aria-hidden="true" />
+                    <span className="num">
+                      {item.daysAgo === 0
+                        ? "heute"
+                        : item.daysAgo === 1
+                          ? "gestern"
+                          : `vor ${item.daysAgo} Tagen`}
+                    </span>
+                  </div>
+                  {/* Punkte und Puls direkt darunter: was der Eintrag
+                      gebracht hat, ist interessanter als wann er war. */}
+                  <div className="text-[11px] text-ink-faint leading-snug">
+                    <span className="num">{item.points.toFixed(1)} P</span>
+                    {item.avgHeartrate != null && (
+                      <>
+                        {" · Ø "}
+                        <span className="num">{item.avgHeartrate}</span>
+                      </>
+                    )}
+                    {item.factor != null && <> · {effortLabel(item.factor)}</>}
+                  </div>
                 </li>
               ))}
             </ul>

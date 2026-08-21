@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { submitFeedback, type FeedbackState } from "@/lib/actions/feedback";
 
 const initial: FeedbackState = { status: "idle" };
@@ -10,7 +10,7 @@ const KATEGORIEN = [
   { key: "bug", label: "Fehler" },
   { key: "idee", label: "Idee" },
   { key: "sonstiges", label: "Sonstiges" },
-];
+] as const;
 
 /**
  * Feedback-Formular auf der Info-Seite.
@@ -18,9 +18,17 @@ const KATEGORIEN = [
  * Gerade nach der Punkte-Umstellung soll die Schwelle fuer Rueckmeldungen
  * so tief wie moeglich sein: Kategorie antippen, zwei Saetze, senden --
  * keine Mail-App, kein Kontextwechsel.
+ *
+ * Bewusst echte <button>-Elemente plus ein verstecktes Feld statt
+ * ausgeblendeter Radios in umschliessenden <label>s: Letzteres liess sich
+ * auf dem iPhone nicht zuverlaessig antippen. Ein Button ist ein Button --
+ * mit garantierter Trefferflaeche und ohne Umweg ueber die Label-Zuordnung.
+ * Aus demselben Grund haengt der Text am Feld ueber htmlFor statt es zu
+ * umschliessen.
  */
 export function FeedbackForm() {
   const [state, formAction, pending] = useActionState(submitFeedback, initial);
+  const [category, setCategory] = useState<string>(KATEGORIEN[0].key);
 
   if (state.status === "sent") {
     return (
@@ -32,29 +40,33 @@ export function FeedbackForm() {
 
   return (
     <form action={formAction} className="space-y-3 text-sm">
+      <input type="hidden" name="category" value={category} />
+
       <div>
         <span className="text-ink-soft text-xs">Worum geht es?</span>
         <div className="grid grid-cols-2 gap-1 mt-1">
-          {KATEGORIEN.map((k, i) => (
-            <label key={k.key} className="cursor-pointer">
-              <input
-                type="radio"
-                name="category"
-                value={k.key}
-                defaultChecked={i === 0}
-                className="peer sr-only"
-              />
-              <span className="btn btn-secondary text-xs w-full peer-checked:bg-[var(--ink)] peer-checked:text-[var(--paper-card)] peer-checked:border-[var(--ink)]">
-                {k.label}
-              </span>
-            </label>
+          {KATEGORIEN.map((k) => (
+            <button
+              key={k.key}
+              type="button"
+              onClick={() => setCategory(k.key)}
+              aria-pressed={category === k.key}
+              className={`btn text-xs w-full ${
+                category === k.key ? "btn-primary" : "btn-secondary"
+              }`}
+            >
+              {k.label}
+            </button>
           ))}
         </div>
       </div>
 
-      <label className="block">
-        <span className="text-ink-soft text-xs">Deine Rückmeldung</span>
+      <div>
+        <label htmlFor="feedback-message" className="text-ink-soft text-xs">
+          Deine Rückmeldung
+        </label>
         <textarea
+          id="feedback-message"
           name="message"
           required
           minLength={3}
@@ -63,7 +75,7 @@ export function FeedbackForm() {
           placeholder="Was funktioniert gut, was stört, was fehlt?"
           className="field mt-1 w-full resize-y"
         />
-      </label>
+      </div>
 
       {state.status === "error" && (
         <p className="text-accent">{state.message}</p>

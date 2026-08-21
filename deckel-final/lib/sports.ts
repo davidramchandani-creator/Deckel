@@ -60,16 +60,29 @@ export const SPORTS_CATALOG: SportDef[] = [
     enabled: false },
   { key: "yoga", label: "Yoga & Pilates", unit: "min", rate: 0.1,
     stravaTypes: ["Yoga", "Pilates"], enabled: false },
-  { key: "racket", label: "Racketsport", unit: "min", rate: 0.15,
-    stravaTypes: ["Tennis", "Badminton", "Squash", "Pickleball", "TableTennis", "Racquetball"],
-    enabled: false },
+  // Racketsport war frueher ein einziger Sammeleintrag. Das machte Tennis
+  // unauffindbar -- wer "Tennis" sucht, sucht nicht nach "Racketsport" --
+  // und warf ausserdem Tischtennis mit Squash in einen Topf, obwohl die
+  // Belastung voellig verschieden ist.
+  { key: "tennis", label: "Tennis", unit: "min", rate: 0.15,
+    stravaTypes: ["Tennis", "Pickleball"], enabled: false },
+  { key: "squash", label: "Squash", unit: "min", rate: 0.18,
+    stravaTypes: ["Squash", "Racquetball"], enabled: false },
+  { key: "badminton", label: "Badminton", unit: "min", rate: 0.15,
+    stravaTypes: ["Badminton"], enabled: false },
+  { key: "tabletennis", label: "Tischtennis", unit: "min", rate: 0.1,
+    stravaTypes: ["TableTennis"], enabled: false },
   { key: "football", label: "Fussball", unit: "min", rate: 0.15,
     stravaTypes: ["Soccer"], enabled: false },
   { key: "climb", label: "Klettern", unit: "min", rate: 0.15,
     stravaTypes: ["RockClimbing"], enabled: false },
   { key: "watersport", label: "Surfen & Segeln", unit: "min", rate: 0.12,
     stravaTypes: ["Surfing", "Kitesurf", "Windsurf", "Sail"], enabled: false },
-  { key: "golf", label: "Golf", unit: "min", rate: 0.06,
+  // Golf wurde nach Dauer kalibriert -- bei Golf ist die Dauer aber
+  // groesstenteils Warten. Mit 0.06 P/min brachte eine 4-Stunden-Runde
+  // 14.4 Punkte, so viel wie 14.4 km Laufen. Eine 18-Loch-Runde zu Fuss
+  // sind etwa 9 km Gehen, also rund 3 Punkte -- daher 0.015.
+  { key: "golf", label: "Golf", unit: "min", rate: 0.015,
     stravaTypes: ["Golf"], enabled: false },
 ];
 

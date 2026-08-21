@@ -4,6 +4,7 @@ import { getActiveMembership } from "@/lib/active-group";
 import { Sheet, SectionLabel } from "@/components/receipt";
 import { Detail } from "./details";
 import { Calculator } from "./calculator";
+import { FeedbackForm } from "./feedback-form";
 import {
   sportsFromSnapshot,
   handicapFromSnapshot,
@@ -470,6 +471,16 @@ export default async function InfoPage() {
             </p>
           </Detail>
         </div>
+      </Sheet>
+
+      <Sheet>
+        <SectionLabel>Feedback</SectionLabel>
+        <p className="text-sm text-ink-soft leading-relaxed mb-3">
+          Die Punkteverteilung ist neu — wenn sich etwas unfair anfühlt
+          oder nicht stimmt, sag es. Die Sätze sind einstellbar, nicht in
+          Stein gemeisselt.
+        </p>
+        <FeedbackForm />
       </Sheet>
     </div>
   );

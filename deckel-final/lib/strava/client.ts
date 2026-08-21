@@ -151,6 +151,8 @@ export interface StravaActivity {
   moving_time: number; // seconds
   start_date: string;
   manual: boolean;
+  /** Fehlt, wenn kein Pulsmesser dabei war -- dann bewusst nicht anwesend, nicht 0. */
+  average_heartrate?: number | null;
 }
 
 export async function fetchActivity(
@@ -211,6 +213,8 @@ export function toActivityRow(
     sport_type: sport.key,
     distance_km: Math.round((activity.distance / 1000) * 1000) / 1000,
     moving_time_s: activity.moving_time,
+    avg_heartrate:
+      activity.average_heartrate != null ? Math.round(activity.average_heartrate) : null,
     started_at: activity.start_date,
     manual: activity.manual ?? false,
     source: "strava" as const,

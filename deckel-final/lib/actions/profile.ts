@@ -114,3 +114,42 @@ export async function setParticipation(
   revalidatePath("/");
   return { status: "idle" };
 }
+
+/**
+ * Ruhepuls/Maximalpuls hinterlegen -- gilt gruppenuebergreifend fuer die
+ * Person, nicht nur fuer eine Mitgliedschaft (genau wie set_display_name).
+ * Ohne diese Werte laeuft der Anstrengungsfaktor bei Kraft/Zeit-Sportarten
+ * auf festen bpm-Schwellen statt relativ zur eigenen Herzfrequenzreserve.
+ * Beide Felder sind optional -- leer lassen setzt sie auf "kein Wert".
+ */
+export async function setHeartRateProfile(
+  _prev: ProfileState,
+  formData: FormData
+): Promise<ProfileState> {
+  const restingRaw = String(formData.get("resting_hr") ?? "").trim();
+  const maxRaw = String(formData.get("max_hr") ?? "").trim();
+
+  const restingHr = restingRaw === "" ? null : Number(restingRaw);
+  const maxHr = maxRaw === "" ? null : Number(maxRaw);
+
+  if (restingHr != null && (!Number.isFinite(restingHr) || restingHr < 25 || restingHr > 120)) {
+    return { status: "error", message: "Ruhepuls muss zwischen 25 und 120 liegen." };
+  }
+  if (maxHr != null && (!Number.isFinite(maxHr) || maxHr < 100 || maxHr > 230)) {
+    return { status: "error", message: "Maximalpuls muss zwischen 100 und 230 liegen." };
+  }
+  if (restingHr != null && maxHr != null && maxHr <= restingHr) {
+    return { status: "error", message: "Maximalpuls muss grösser als Ruhepuls sein." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_heart_rate_profile", {
+    p_resting_hr: restingHr,
+    p_max_hr: maxHr,
+  });
+  if (error) return { status: "error", message: error.message };
+
+  revalidatePath("/gruppe");
+  revalidatePath("/");
+  return { status: "idle" };
+}

@@ -10,6 +10,7 @@ import { GroupSwitcher } from "./group-switcher";
 import { LeaveGroup } from "./leave-group";
 import { PromoteButton } from "./promote";
 import { Participation, type PartStatus } from "./participation";
+import { HeartRateProfile } from "./heart-rate-profile";
 import { Sheet, SectionLabel, Line, money } from "@/components/receipt";
 import type { SportsConfig, HandicapConfig } from "@/lib/sports";
 import { PushToggle } from "@/components/push-toggle";
@@ -112,6 +113,7 @@ export default async function GruppePage() {
 
   const isAdmin = active.role === "admin";
   const memberCount = members?.length ?? 0;
+  const me = members?.find((m) => m.user_id === user!.id) ?? null;
   const otherAdmins =
     members?.filter((m) => m.role === "admin" && m.user_id !== user!.id).length ?? 0;
 
@@ -238,6 +240,14 @@ export default async function GruppePage() {
         <Link href="/name" className="btn btn-secondary w-full">
           Namen ändern
         </Link>
+      </Sheet>
+
+      <Sheet>
+        <SectionLabel>Ruhepuls & Maximalpuls</SectionLabel>
+        <HeartRateProfile
+          restingHr={me?.resting_hr ?? null}
+          maxHr={me?.max_hr ?? null}
+        />
       </Sheet>
 
       {process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && (

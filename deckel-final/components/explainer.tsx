@@ -62,10 +62,20 @@ export function Explainer({
               ))}
             </ul>
             <p className="mt-1.5">
-              Alles andere zählt nicht. Alle Aktivitäten kommen direkt aus
-              Strava — von Hand eintragen geht nicht, damit für alle dasselbe
-              gilt.
+              Alles andere zählt nicht. Aktivitäten kommen automatisch aus
+              Strava; von Hand eingetragene zählen erst, wenn die Mehrheit
+              der Gruppe sie bestätigt hat.
             </p>
+            {sports.some((sp) => sp.unit === "min") && (
+              <p className="mt-1.5">
+                Bei Kraft, Yoga & Co. ist Minuten × Satz nur die Basis: dazu
+                kommt ein Anstrengungsfaktor nach Ø-Puls, damit eine Stunde
+                mit viel Leerlauf nicht gleich viel bringt wie eine Stunde
+                durchgehender Arbeit. Wer Ruhepuls und Maximalpuls im Profil
+                hinterlegt, wird relativ zu sich selbst bewertet; sonst gelten
+                feste Puls-Schwellen.
+              </p>
+            )}
           </div>
 
           <div>

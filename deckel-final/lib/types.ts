@@ -22,6 +22,9 @@ export interface Member {
   display_name: string;
   role: "member" | "admin";
   strava_athlete_id: number | null;
+  /** Fuer den Anstrengungsfaktor bei Zeit-Sportarten. Optional, selbst gepflegt. */
+  resting_hr: number | null;
+  max_hr: number | null;
   created_at: string;
 }
 
@@ -61,12 +64,16 @@ export interface Activity {
   member_id: string;
   period_id: string | null;
   strava_activity_id: number | null;
-  sport_type: "run" | "bike";
+  sport_type: string;
   distance_km: number;
   moving_time_s: number | null;
+  /** Aus Strava gespiegelt, fuer den Anstrengungsfaktor. Bei manuellen Eintraegen null. */
+  avg_heartrate: number | null;
   started_at: string;
   manual: boolean;
   source: "strava" | "manual";
+  status?: "pending" | "approved" | "rejected";
+  note?: string | null;
 }
 
 export interface Settlement {

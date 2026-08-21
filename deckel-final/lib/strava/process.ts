@@ -242,12 +242,12 @@ async function currentLeader(
 
   const { data: members } = await admin
     .from("members")
-    .select("id")
+    .select("id, resting_hr, max_hr")
     .eq("group_id", period.group_id);
 
   const { data: activities } = await admin
     .from("activities")
-    .select("member_id, sport_type, distance_km, moving_time_s")
+    .select("member_id, sport_type, distance_km, moving_time_s, avg_heartrate")
     .eq("period_id", periodId)
     .eq("status", "approved");
 
@@ -258,7 +258,7 @@ async function currentLeader(
 
   const byMember = new Map<
     string,
-    { sportKey: string; distanceKm: number; movingTimeMin: number }[]
+    { sportKey: string; distanceKm: number; movingTimeMin: number; avgHeartrate: number | null }[]
   >();
   for (const a of activities ?? []) {
     const list = byMember.get(a.member_id) ?? [];
@@ -266,6 +266,7 @@ async function currentLeader(
       sportKey: a.sport_type,
       distanceKm: Number(a.distance_km),
       movingTimeMin: (a.moving_time_s ?? 0) / 60,
+      avgHeartrate: a.avg_heartrate ?? null,
     });
     byMember.set(a.member_id, list);
   }
@@ -279,9 +280,13 @@ async function currentLeader(
 
   const participants: Participant[] = (members ?? []).map((m) => {
     const part = partByMember.get(m.id);
+    const profile = { restingHr: m.resting_hr ?? null, maxHr: m.max_hr ?? null };
     return {
       memberId: m.id,
-      points: applyHandicap(totalPointsFor(byMember.get(m.id) ?? [], sports), handicap),
+      points: applyHandicap(
+        totalPointsFor(byMember.get(m.id) ?? [], sports, profile),
+        handicap
+      ),
       status: part?.status ?? "active",
       sickFromDay: part?.sickFromDay,
     };

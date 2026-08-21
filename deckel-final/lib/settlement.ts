@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { computeSettlement, currentPeriodDay, type Participant } from "@/lib/rules";
-import { sportsFromSnapshot, totalPointsFor, pointsForScorable, sportByKey, formatAmount, applyHandicap, handicapFromSnapshot, rawNeededFor, type SportDef, type HandicapConfig } from "@/lib/sports";
+import { sportsFromSnapshot, totalPointsFor, pointsForScorable, sportByKey, formatAmount, applyHandicap, handicapFromSnapshot, rawNeededFor, type SportDef, type HandicapConfig, type HeartRateProfile } from "@/lib/sports";
 import type { Activity, Member, Period } from "@/lib/types";
 import { getActiveMembership } from "@/lib/active-group";
 
@@ -153,6 +153,16 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
     partByMember.set(p.member_id, { status: p.status, sick_from_day: p.sick_from_day });
   }
 
+  // Ruhepuls/Maximalpuls je Mitglied, fuer den Anstrengungsfaktor bei
+  // Zeit-Sportarten. Wer nichts hinterlegt hat, faellt auf feste
+  // bpm-Schwellen zurueck -- siehe effortFactor() in lib/sports.ts.
+  const profileByMember = new Map<string, HeartRateProfile>(
+    ((members as Member[] | null) ?? []).map((m) => [
+      m.id,
+      { restingHr: m.resting_hr ?? null, maxHr: m.max_hr ?? null },
+    ])
+  );
+
   const rawByMember = new Map<string, number>();
   const participants: Participant[] = ((members as Member[] | null) ?? []).map((m) => {
     const memberActivities = activitiesByMember.get(m.id) ?? [];
@@ -161,8 +171,10 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
         sportKey: a.sport_type,
         distanceKm: Number(a.distance_km),
         movingTimeMin: (a.moving_time_s ?? 0) / 60,
+        avgHeartrate: a.avg_heartrate ?? null,
       })),
-      sports
+      sports,
+      profileByMember.get(m.id)
     );
     // Die Staffelung wirkt auf die Summe, nicht auf einzelne Aktivitaeten --
     // sonst haenge das Ergebnis von der Reihenfolge ab, in der Strava
@@ -277,12 +289,13 @@ export async function getMySettlementView(): Promise<GroupSettlementView | null>
         sportKey: a.sport_type,
         distanceKm: Number(a.distance_km),
         movingTimeMin: (a.moving_time_s ?? 0) / 60,
+        avgHeartrate: a.avg_heartrate ?? null,
       };
       return {
         displayName: memberById2.get(a.member_id)?.display_name ?? "?",
         sportLabel: sportByKey(a.sport_type, sports)?.label ?? a.sport_type,
         amount: formatAmount(scorable, sports),
-        points: pointsForScorable(scorable, sports),
+        points: pointsForScorable(scorable, sports, profileByMember.get(a.member_id)),
         daysAgo: Math.floor((nowMs - new Date(a.started_at).getTime()) / 86400000),
         isMe: a.member_id === membership.id,
       };

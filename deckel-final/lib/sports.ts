@@ -13,6 +13,9 @@
  * Rates are calibrated so an hour of honest effort lands in a similar
  * points range across sports (roughly 8-12 P/h), with running as the
  * reference at 1.00 P/km.
+ *
+ * For "min" sports, the rate is only the base -- see effortFactor() below
+ * for how average heart rate scales it up or down.
  */
 
 export type SportUnit = "km" | "min";
@@ -81,8 +84,8 @@ export const SPORTS_CATALOG: SportDef[] = [
   // Golf wurde nach Dauer kalibriert -- bei Golf ist die Dauer aber
   // groesstenteils Warten. Mit 0.06 P/min brachte eine 4-Stunden-Runde
   // 14.4 Punkte, so viel wie 14.4 km Laufen. Eine 18-Loch-Runde zu Fuss
-  // sind etwa 9 km Gehen, also rund 3 Punkte -- daher 0.015.
-  { key: "golf", label: "Golf", unit: "min", rate: 0.015,
+  // sind etwa 9 km Gehen, also rund 3 Punkte -- daher 0.02.
+  { key: "golf", label: "Golf", unit: "min", rate: 0.02,
     stravaTypes: ["Golf"], enabled: false },
 ];
 
@@ -139,17 +142,117 @@ export interface ScorableActivity {
   sportKey: string;
   distanceKm: number;
   movingTimeMin: number;
+  /** Strava's average_heartrate for this activity, wenn vorhanden. */
+  avgHeartrate?: number | null;
+}
+
+/**
+ * Persoenlicher Ruhepuls/Maximalpuls -- Eigenschaft der Person, nicht der
+ * Gruppe. Kommt aus members.resting_hr / members.max_hr.
+ */
+export interface HeartRateProfile {
+  restingHr: number | null;
+  maxHr: number | null;
+}
+
+/* ------------------------------------------------------------------
+ * Anstrengungsfaktor fuer Zeit-Sportarten.
+ *
+ * Bei Distanz-Sportarten (Laufen, Velo, ...) ist Tempo egal -- ein
+ * lockerer Erholungslauf bekommt schon durch die Kilometer die richtige
+ * (volle) Wertung. Bei Zeit-Sportarten (Kraft, Yoga, Racketsport, ...)
+ * ist Zeit dagegen die einzige Groesse, und Zeit laesst sich mit Pausen
+ * strecken -- zwei Stunden mit viel Leerlauf zaehlen sonst gleich viel
+ * wie eine durchgehend geforderte Stunde.
+ *
+ * Der Puls-Durchschnitt der ganzen Aktivitaet loest genau das: eine
+ * Session mit vielen kurzen, harten Saetzen und normalen Pausen bleibt
+ * im Schnitt hoch; eine Session, die grossteils Leerlauf war, faellt ab.
+ * Absichtlich NICHT bestraft wird "hat Pausen gemacht" an sich -- jedes
+ * vernuenftige Krafttraining hat welche.
+ *
+ * Zwei Massstaebe:
+ *  - Mit hinterlegtem Ruhepuls/Maximalpuls: relativ zur eigenen
+ *    Herzfrequenzreserve (Karvonen) -- fair unabhaengig vom individuellen
+ *    Ruhepuls.
+ *  - Ohne Profil: feste bpm-Schwellen als Rueckfall. Schwaecher, aber
+ *    besser als nichts.
+ *
+ * Fehlt der Puls ganz (kein Gurt, manueller Eintrag): Faktor 1 (neutral)
+ * -- weder Bonus noch Strafe.
+ *
+ * Erster Entwurf, kalibriert an echten Trainingsdaten der Gruppe.
+ * Absichtlich nachjustierbar, sobald mehr Sessions vorliegen.
+ * ------------------------------------------------------------------ */
+
+interface EffortZone {
+  max: number;
+  factor: number;
+}
+
+const EFFORT_ZONES_ABSOLUTE_BPM: EffortZone[] = [
+  { max: 90, factor: 0.6 },
+  { max: 105, factor: 0.8 },
+  { max: 120, factor: 1.0 },
+  { max: 140, factor: 1.25 },
+  { max: Infinity, factor: 1.5 },
+];
+
+const EFFORT_ZONES_PERCENT_HRR: EffortZone[] = [
+  { max: 25, factor: 0.6 },
+  { max: 40, factor: 0.8 },
+  { max: 55, factor: 1.0 },
+  { max: 70, factor: 1.25 },
+  { max: Infinity, factor: 1.5 },
+];
+
+function zoneFactor(value: number, zones: EffortZone[]): number {
+  for (const z of zones) {
+    if (value < z.max) return z.factor;
+  }
+  return zones[zones.length - 1].factor;
+}
+
+/**
+ * Anstrengungsfaktor fuer eine Aktivitaet mit gegebenem Ø-Puls.
+ * Ohne Pulsdaten: 1 (neutral). Mit Profil: relativ (%HFR). Ohne Profil,
+ * aber mit Puls: absolute bpm-Schwellen.
+ */
+export function effortFactor(
+  avgHeartrate: number | null | undefined,
+  profile?: HeartRateProfile | null
+): number {
+  if (avgHeartrate == null || avgHeartrate <= 0) return 1;
+
+  const restingHr = profile?.restingHr;
+  const maxHr = profile?.maxHr;
+  if (restingHr != null && maxHr != null && maxHr > restingHr) {
+    const pctHrr = ((avgHeartrate - restingHr) / (maxHr - restingHr)) * 100;
+    return zoneFactor(Math.max(0, pctHrr), EFFORT_ZONES_PERCENT_HRR);
+  }
+
+  return zoneFactor(avgHeartrate, EFFORT_ZONES_ABSOLUTE_BPM);
 }
 
 /** Points for one activity under the given sports config. Unknown sports score 0. */
-export function pointsForScorable(a: ScorableActivity, sports: SportDef[]): number {
+export function pointsForScorable(
+  a: ScorableActivity,
+  sports: SportDef[],
+  profile?: HeartRateProfile | null
+): number {
   const sport = sportByKey(a.sportKey, sports);
   if (!sport) return 0;
-  return sport.unit === "km" ? a.distanceKm * sport.rate : a.movingTimeMin * sport.rate;
+  if (sport.unit === "km") return a.distanceKm * sport.rate;
+  const factor = effortFactor(a.avgHeartrate, profile);
+  return Math.round(a.movingTimeMin * sport.rate * factor * 100) / 100;
 }
 
-export function totalPointsFor(activities: ScorableActivity[], sports: SportDef[]): number {
-  return activities.reduce((sum, a) => sum + pointsForScorable(a, sports), 0);
+export function totalPointsFor(
+  activities: ScorableActivity[],
+  sports: SportDef[],
+  profile?: HeartRateProfile | null
+): number {
+  return activities.reduce((sum, a) => sum + pointsForScorable(a, sports, profile), 0);
 }
 
 /** "12.5 km" or "45 min" depending on the sport's unit. */

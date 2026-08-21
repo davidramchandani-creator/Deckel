@@ -83,3 +83,34 @@ export async function updateGroupRules(
   revalidatePath("/");
   return { status: "idle" };
 }
+
+/**
+ * Ferien, Krankheit oder Ausstieg fuer die laufende Periode melden.
+ *
+ * "sick" deckelt die eigene Schuld anteilig ab dem Meldetag, "withdrawn"
+ * setzt sie auf null und nimmt einen aus der Rekordwertung. Der Meldetag
+ * wird serverseitig bestimmt -- nicht vom Client -- damit niemand sich
+ * nachtraeglich einen frueheren Tag eintragen kann.
+ */
+export async function setParticipation(
+  _prev: ProfileState,
+  formData: FormData
+): Promise<ProfileState> {
+  const groupId = String(formData.get("group_id") ?? "");
+  const status = String(formData.get("status") ?? "");
+
+  if (!["active", "sick", "withdrawn"].includes(status)) {
+    return { status: "error", message: "Unbekannter Status." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_my_participation", {
+    p_group_id: groupId,
+    p_status: status,
+  });
+  if (error) return { status: "error", message: error.message };
+
+  revalidatePath("/gruppe");
+  revalidatePath("/");
+  return { status: "idle" };
+}

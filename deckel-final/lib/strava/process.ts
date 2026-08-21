@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/server-admin";
 import { fetchActivity, getValidAccessToken, toActivityRow, tokenMemberForAthlete } from "@/lib/strava/client";
-import { sportsFromSnapshot, handicapFromSnapshot, applyHandicap } from "@/lib/sports";
+import { sportsFromSnapshot, handicapFromSnapshot, applyHandicap, SPORTS_CATALOG } from "@/lib/sports";
 import { computeSettlement, type Participant } from "@/lib/rules";
 import { totalPointsFor } from "@/lib/sports";
 import { sendPushToMembers } from "@/lib/push";
@@ -153,11 +153,22 @@ export async function processWebhookEvent(eventId: string): Promise<void> {
       const period = await findPeriodForActivity(admin, member.group_id, activity.start_date);
       const sports = sportsFromSnapshot(period?.snapshot ?? {});
       const periodId = period?.id ?? null;
-      const row = toActivityRow(activity, member.id, periodId, sports);
+      // Erst gegen die aktiven Sportarten der Gruppe, dann gegen den ganzen
+      // Katalog.
+      //
+      // Der zweite Versuch ist der wichtige: eine Sportart, die gerade nicht
+      // zaehlt, wurde frueher gar nicht erst gespeichert und war damit fuer
+      // immer verloren. Schaltete der Admin sie spaeter frei, konnte sie nicht
+      // mehr auftauchen -- genau so verschwand eine Tennis-Einheit spurlos.
+      // Jetzt liegt sie in der Datenbank und zaehlt schlicht 0 Punkte,
+      // solange die Regel sie nicht kennt.
+      const row =
+        toActivityRow(activity, member.id, periodId, sports) ??
+        toActivityRow(activity, member.id, periodId, SPORTS_CATALOG);
 
       if (!row) {
-        // Not a scored sport in THIS group (or edited away): drop any stale
-        // copy for this member only.
+        // Strava kennt die Sportart, unser Katalog nicht -- daraus koennte
+        // nie eine Wertung werden. Alte Kopie fuer dieses Mitglied entfernen.
         await admin
           .from("activities")
           .delete()

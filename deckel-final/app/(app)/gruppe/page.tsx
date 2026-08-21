@@ -9,6 +9,7 @@ import { ApplyRulesNow } from "./apply-now";
 import { GroupSwitcher } from "./group-switcher";
 import { LeaveGroup } from "./leave-group";
 import { PromoteButton } from "./promote";
+import { Participation, type PartStatus } from "./participation";
 import { Sheet, SectionLabel, Line, money } from "@/components/receipt";
 import type { SportsConfig, HandicapConfig } from "@/lib/sports";
 import { PushToggle } from "@/components/push-toggle";
@@ -83,6 +84,31 @@ export default async function GruppePage() {
       .filter((r) => r.strava_tokens?.revoked_at === null)
       .map((r) => r.id)
   );
+
+  // Eigener Teilnahme-Status fuer die laufende Periode. Fehlt die Zeile,
+  // ist man normal dabei -- participations wird erst beim ersten Melden
+  // angelegt.
+  const { data: myPart } = period
+    ? await supabase
+        .from("participations")
+        .select("status, sick_from_day")
+        .eq("period_id", period.id)
+        .eq("member_id", active.memberId)
+        .maybeSingle<{ status: PartStatus; sick_from_day: number | null }>()
+    : { data: null };
+
+  const periodDay = period
+    ? Math.min(
+        Math.max(
+          Math.floor(
+            (Date.now() - new Date(period.starts_on + "T00:00:00").getTime()) /
+              86400000
+          ) + 1,
+          1
+        ),
+        period.settings_snapshot.period_days
+      )
+    : 1;
 
   const isAdmin = active.role === "admin";
   const memberCount = members?.length ?? 0;
@@ -190,6 +216,20 @@ export default async function GruppePage() {
               </p>
             </div>
           )}
+        </Sheet>
+      )}
+
+      {period && settings && (
+        <Sheet>
+          <SectionLabel>Deine Teilnahme</SectionLabel>
+          <Participation
+            groupId={active.groupId}
+            current={myPart?.status ?? "active"}
+            sickFromDay={myPart?.sick_from_day ?? null}
+            currentDay={periodDay}
+            periodDays={period.settings_snapshot.period_days}
+            capChf={Number(period.settings_snapshot.cap_chf)}
+          />
         </Sheet>
       )}
 

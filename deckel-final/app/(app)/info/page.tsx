@@ -67,8 +67,19 @@ export default async function InfoPage() {
         <SectionLabel>Punkte sammeln</SectionLabel>
         <div className="text-sm text-ink-soft space-y-3 leading-relaxed">
           <p>
-            Jede Aktivität wird in Punkte umgerechnet. Es gibt zwei Arten von
-            Sportarten, und der Unterschied ist wichtig.
+            Jede Aktivität wird in Punkte umgerechnet. Der Grundsatz hinter
+            allen Sätzen: <em>eine Stunde ehrlicher Sport soll überall
+            ungefähr gleich viel wert sein.</em> Massstab dafür ist der
+            Energieverbrauch der Sportart (der sogenannte MET-Wert, ein
+            publizierter Standard der Sportwissenschaft). Laufen ist der
+            Anker mit 1 Punkt pro Kilometer — alle anderen Sätze sind
+            darauf umgerechnet.
+          </p>
+          <p>
+            Deshalb bringt eine Stunde Squash mehr als eine Stunde Yoga, und
+            ein Kilometer Schwimmen viel mehr als ein Kilometer Velo: nicht
+            weil eine Sportart „besser“ wäre, sondern weil sie pro Stunde
+            mehr Energie kostet.
           </p>
 
           {distanzSportarten.length > 0 && (
@@ -110,6 +121,15 @@ export default async function InfoPage() {
                 Herumstehen sind nicht dasselbe wie zwei Stunden Arbeit.
                 Darum kommt der Anstrengungsfaktor dazu.
               </p>
+              <p className="mt-1.5">
+                Noch ein Detail, das die Sätze erklärt: bei Sportarten mit
+                GPS zählt Strava nur die <em>Bewegungszeit</em> — eine
+                Golfrunde steht mit ihrer Gehzeit drin, nicht mit vier
+                Stunden. Im Gym gibt es nichts zu erkennen, dort landet die
+                ganze Session inklusive Pausen in der Zeit. Deshalb wirkt
+                der Gym-Satz pro Minute tiefer, als er sich anfühlt: die
+                Pausen stecken schon in den Minuten.
+              </p>
             </div>
           )}
         </div>
@@ -138,13 +158,20 @@ export default async function InfoPage() {
             </p>
             <p className="mt-1.5">
               Deshalb wird jede Einheit mit dem Normalwert{" "}
-              <em>ihrer eigenen Sportart</em> verglichen. Der Faktor
-              beantwortet nur eine Frage: War diese Einheit härter oder
-              lockerer als eine normale Einheit derselben Sportart? Eine
-              typische Krafteinheit und eine typische Fussballeinheit
-              bekommen beide den Faktor 1.0. Wie viel eine Sportart
-              grundsätzlich wert ist, entscheidet allein ihr Satz oben — und
-              den stellt ihr selbst ein.
+              <em>ihrer eigenen Sportart</em> verglichen — nie mit einer
+              anderen Sportart. Ein Beispiel: Tim spielt Fussball mit Puls
+              147 — für Fussball ganz normal, Faktor 1.0. Dave macht
+              Krafttraining mit Puls 96 — für Krafttraining ganz normal,
+              auch Faktor 1.0. Beide waren also gleich hart unterwegs,
+              obwohl ihre Pulswerte 50 Schläge auseinanderliegen. Der Puls
+              beantwortet immer nur: „War das eine harte oder eine lockere
+              Einheit für mich in dieser Sportart?“ — nie „Ist Fussball mehr
+              wert als Krafttraining?“
+            </p>
+            <p className="mt-1.5">
+              Ob eine Stunde Fussball am Ende mehr Punkte bringt als eine
+              Stunde Krafttraining, entscheidet einzig der Satz oben (P/min)
+              — und den stellt die Gruppe selbst ein.
             </p>
           </div>
 

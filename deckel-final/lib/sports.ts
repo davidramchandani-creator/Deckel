@@ -38,70 +38,114 @@ export interface SportDef {
   hrReference?: number;
 }
 
+/* ------------------------------------------------------------------
+ * Die Saetze: eine Stunde Sport soll ueberall aehnlich viel wert sein.
+ *
+ * Massstab ist der MET-Wert der Sportart (metabolisches Aequivalent,
+ * publizierte Richtwerte fuer den Energieverbrauch; 1 MET = Ruhe).
+ * Faustregel: Punkte pro Stunde ~ MET. Laufen (~12.5 MET bei 12.4 km/h,
+ * dem echten Schnitt dieser Gruppe) bleibt der Anker bei 1.00 P/km --
+ * daraus ergeben sich alle anderen Saetze ueber die typische
+ * Geschwindigkeit bzw. direkt pro Minute.
+ *
+ * Wichtig fuers Verstaendnis: bei GPS-Sportarten zaehlt Strava nur die
+ * BEWEGUNGSzeit (eine Golfrunde steht mit ~45 min drin, nicht mit 4 h),
+ * bei Hallensport dagegen die volle Dauer inklusive Pausen. Deshalb
+ * wirken die P/min-Saetze fuer Gym & Co. niedrig -- die Pausen stecken
+ * schon in der Zeit, und den Rest regelt der Anstrengungsfaktor unten.
+ * ------------------------------------------------------------------ */
+
 export const SPORTS_CATALOG: SportDef[] = [
   // --- distance sports: points per kilometre ---
+  // ~12.5 MET / 12.4 km/h (Gruppenschnitt) -> 1.00 P/km. Der Anker.
   { key: "run", label: "Laufen", unit: "km", rate: 1.0,
     stravaTypes: ["Run", "TrailRun", "VirtualRun"], enabled: true },
-  { key: "bike", label: "Velo", unit: "km", rate: 0.25,
+  // ~8 MET / 24 km/h (Gruppenschnitt) -> 0.33 P/km.
+  { key: "bike", label: "Velo", unit: "km", rate: 0.33,
     stravaTypes: ["Ride", "VirtualRide", "GravelRide", "MountainBikeRide", "Velomobile", "Handcycle"],
     enabled: true },
   // E-bikes get their own, much lower rate -- a motor is not the same
   // effort, and lumping them in with road bikes would be unfair.
-  { key: "ebike", label: "E-Bike", unit: "km", rate: 0.1,
+  // ~4.5 MET / 23 km/h -> 0.20 P/km.
+  { key: "ebike", label: "E-Bike", unit: "km", rate: 0.2,
     stravaTypes: ["EBikeRide", "EMountainBikeRide"], enabled: false },
-  { key: "swim", label: "Schwimmen", unit: "km", rate: 3.0,
+  // ~7 MET / 1.6 km/h (Gruppenschnitt) -> 4.4 P/km. Ja, wirklich: ein
+  // Kilometer Schwimmen ist Arbeit fuer eine gute halbe Stunde.
+  { key: "swim", label: "Schwimmen", unit: "km", rate: 4.4,
     stravaTypes: ["Swim"], enabled: false },
-  { key: "hike", label: "Wandern", unit: "km", rate: 0.5,
+  // ~5.3 MET / 3.5 km/h -> 1.5 P/km. Vorher stand Wandern kaum ueber
+  // Spazieren, obwohl es meist bergauf geht.
+  { key: "hike", label: "Wandern", unit: "km", rate: 1.5,
     stravaTypes: ["Hike"], enabled: false },
-  { key: "walk", label: "Spazieren", unit: "km", rate: 0.3,
+  // ~3 MET / 4.5 km/h -> 0.65 P/km. Physiologisch korrekt, strategisch
+  // die offene Tuer im System: wer viel Zeit hat, kann mit Spazieren
+  // Punkte sammeln. Bewusst standardmaessig AUS -- einschalten ist ein
+  // informierter Gruppenentscheid.
+  { key: "walk", label: "Spazieren", unit: "km", rate: 0.65,
     stravaTypes: ["Walk", "Wheelchair"], enabled: false },
-  { key: "row", label: "Rudern & Paddeln", unit: "km", rate: 0.6,
+  // ~7 MET / 8 km/h -> 0.9 P/km.
+  { key: "row", label: "Rudern & Paddeln", unit: "km", rate: 0.9,
     stravaTypes: ["Rowing", "VirtualRow", "Kayaking", "Canoeing", "StandUpPaddling"],
     enabled: false },
-  { key: "skate", label: "Skaten", unit: "km", rate: 0.35,
+  // ~7.5 MET / 15 km/h -> 0.5 P/km.
+  { key: "skate", label: "Skaten", unit: "km", rate: 0.5,
     stravaTypes: ["InlineSkate", "IceSkate", "Skateboard"], enabled: false },
-  { key: "wintersport", label: "Ski & Snowboard", unit: "km", rate: 0.5,
+  // Mischwert ~6 MET / 10 km/h -> 0.6 P/km. Langlauf ist haerter,
+  // Alpin-Abfahrt leichter als der Satz -- der Sammel-Eintrag ist ein
+  // Kompromiss, bis die Gruppe echte Winterdaten hat.
+  { key: "wintersport", label: "Ski & Snowboard", unit: "km", rate: 0.6,
     stravaTypes: ["NordicSki", "BackcountrySki", "RollerSki", "Snowshoe", "AlpineSki", "Snowboard"],
     enabled: false },
 
   // --- time sports: points per minute ---
   //
-  // hrReference ist der typische Ø-Puls DIESER Sportart (als Anteil der
-  // Herzfrequenzreserve). Kraftsport liegt tief, weil schwere Saetze kurz
-  // sind und dazwischen pausiert wird -- das ist keine geringere
-  // Anstrengung, sondern eine andere Physiologie. Ohne diese Bezugsgroesse
-  // wuerde Kraftsport gegenueber Ballsport systematisch verlieren.
+  // Satz = MET/60, gerundet. Dazu hrReference: der typische Ø-Puls DIESER
+  // Sportart (als Anteil der Herzfrequenzreserve). Kraftsport liegt tief,
+  // weil schwere Saetze kurz sind und dazwischen pausiert wird -- das ist
+  // keine geringere Anstrengung, sondern andere Physiologie. Der
+  // Anstrengungsfaktor vergleicht deshalb immer nur innerhalb derselben
+  // Sportart. Referenzen fuer Kraft/Golf/Fussball sind an echten
+  // Gruppendaten kalibriert (Median Ø-Puls 96/107/147), der Rest ist
+  // physiologisch geschaetzt und wird nachjustiert, sobald Daten da sind.
   //
-  // Werte mit echten Gruppendaten abgeglichen: Median Ø-Puls war
-  // Kraft 96, Golf 107, Fussball 147.
-  { key: "gym", label: "Kraft & Fitness", unit: "min", rate: 0.15, hrReference: 0.28,
+  // ~5.5 MET -> 0.09 P/min. Die Abwertung von 0.15 ist Absicht: eine
+  // Stunde Gym stand mit vollen Satzpausen fast gleich hoch wie eine
+  // Stunde Laufen in Bewegung.
+  { key: "gym", label: "Kraft & Fitness", unit: "min", rate: 0.09, hrReference: 0.28,
     stravaTypes: ["WeightTraining", "Workout", "Crossfit", "HighIntensityIntervalTraining", "Elliptical", "StairStepper"],
     enabled: false },
-  { key: "yoga", label: "Yoga & Pilates", unit: "min", rate: 0.1, hrReference: 0.18,
+  // ~3 MET -> 0.05 P/min.
+  { key: "yoga", label: "Yoga & Pilates", unit: "min", rate: 0.05, hrReference: 0.18,
     stravaTypes: ["Yoga", "Pilates"], enabled: false },
   // Racketsport war frueher ein einziger Sammeleintrag. Das machte Tennis
   // unauffindbar -- wer "Tennis" sucht, sucht nicht nach "Racketsport" --
   // und warf ausserdem Tischtennis mit Squash in einen Topf, obwohl die
   // Belastung voellig verschieden ist.
-  { key: "tennis", label: "Tennis", unit: "min", rate: 0.15, hrReference: 0.5,
+  // ~7 MET -> 0.12 P/min.
+  { key: "tennis", label: "Tennis", unit: "min", rate: 0.12, hrReference: 0.5,
     stravaTypes: ["Tennis", "Pickleball"], enabled: false },
-  { key: "squash", label: "Squash", unit: "min", rate: 0.18, hrReference: 0.6,
+  // ~9 MET -> 0.15 P/min. Der haerteste Racketsport.
+  { key: "squash", label: "Squash", unit: "min", rate: 0.15, hrReference: 0.6,
     stravaTypes: ["Squash", "Racquetball"], enabled: false },
-  { key: "badminton", label: "Badminton", unit: "min", rate: 0.15, hrReference: 0.48,
+  // ~5.5 MET (Freizeitspiel) -> 0.09 P/min.
+  { key: "badminton", label: "Badminton", unit: "min", rate: 0.09, hrReference: 0.48,
     stravaTypes: ["Badminton"], enabled: false },
-  { key: "tabletennis", label: "Tischtennis", unit: "min", rate: 0.1, hrReference: 0.3,
+  // ~4 MET -> 0.07 P/min.
+  { key: "tabletennis", label: "Tischtennis", unit: "min", rate: 0.07, hrReference: 0.3,
     stravaTypes: ["TableTennis"], enabled: false },
-  { key: "football", label: "Fussball", unit: "min", rate: 0.15, hrReference: 0.65,
+  // ~7 MET (Freizeitspiel ueber die volle Dauer) -> 0.12 P/min.
+  { key: "football", label: "Fussball", unit: "min", rate: 0.12, hrReference: 0.65,
     stravaTypes: ["Soccer"], enabled: false },
-  { key: "climb", label: "Klettern", unit: "min", rate: 0.15, hrReference: 0.33,
+  // ~7.5 MET klettern, aber viel Sichern/Stehen -> 0.12 P/min.
+  { key: "climb", label: "Klettern", unit: "min", rate: 0.12, hrReference: 0.33,
     stravaTypes: ["RockClimbing"], enabled: false },
-  { key: "watersport", label: "Surfen & Segeln", unit: "min", rate: 0.12, hrReference: 0.33,
+  // ~5 MET Mischwert -> 0.08 P/min.
+  { key: "watersport", label: "Surfen & Segeln", unit: "min", rate: 0.08, hrReference: 0.33,
     stravaTypes: ["Surfing", "Kitesurf", "Windsurf", "Sail"], enabled: false },
-  // Golf wurde nach Dauer kalibriert -- bei Golf ist die Dauer aber
-  // groesstenteils Warten. Mit 0.06 P/min brachte eine 4-Stunden-Runde
-  // 14.4 Punkte, so viel wie 14.4 km Laufen. Eine 18-Loch-Runde zu Fuss
-  // sind etwa 9 km Gehen, also rund 3 Punkte -- daher 0.02.
-  { key: "golf", label: "Golf", unit: "min", rate: 0.02, hrReference: 0.36,
+  // ~4.3 MET (zu Fuss, Bag tragen) -> 0.07 P/min. Wirkt hoch verglichen
+  // mit frueher (0.02) -- aber Strava zaehlt bei Golf nur die
+  // Bewegungszeit, eure Runden stehen mit 22-58 min drin, nicht mit 4 h.
+  { key: "golf", label: "Golf", unit: "min", rate: 0.07, hrReference: 0.36,
     stravaTypes: ["Golf"], enabled: false },
 ];
 

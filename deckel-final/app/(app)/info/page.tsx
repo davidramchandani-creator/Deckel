@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getActiveMembership } from "@/lib/active-group";
 import { Sheet, SectionLabel } from "@/components/receipt";
 import { Detail } from "./details";
+import { Calculator } from "./calculator";
 import {
   sportsFromSnapshot,
   handicapFromSnapshot,
@@ -145,40 +146,98 @@ export default async function InfoPage() {
         <SectionLabel>Punkte sammeln</SectionLabel>
 
         <p className="text-sm text-ink-soft leading-relaxed mb-3">
-          Eine Stunde Sport ist überall etwa gleich viel wert. Laufen ist
-          der Massstab: <span className="text-ink">1 km = 1 Punkt</span>.
+          Der Massstab hinter allen Sätzen ist der{" "}
+          <span className="text-ink">Energieverbrauch pro Stunde</span> —
+          in der Sportwissenschaft „MET“ genannt. Eine Stunde Squash
+          verbrennt etwa dreimal so viel wie eine Stunde Yoga, also gibt
+          sie etwa dreimal so viele Punkte. Anker ist Laufen:{" "}
+          <span className="text-ink">1 km = 1 Punkt</span>.
         </p>
 
-        {distanz.length > 0 && (
-          <div className="mb-3">
-            <p className="label mb-1">Nach Distanz</p>
-            <ul className="text-sm">
-              {distanz.map((sp) => (
-                <li key={sp.key} className="flex items-baseline">
-                  <span>{sp.label}</span>
-                  <span className="leader" aria-hidden="true" />
-                  <span className="num">{sp.rate} P/km</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        <svg
+          viewBox="0 0 300 108"
+          className="w-full h-auto mb-3"
+          role="img"
+          aria-label="Balken: eine Stunde Laufen 12.5 Punkte, Squash 9, Velo 8, Kraft 5.5, Yoga 3."
+        >
+          {[
+            { label: "Laufen", ph: 12.5 },
+            { label: "Squash", ph: 9 },
+            { label: "Velo", ph: 8 },
+            { label: "Kraft", ph: 5.5 },
+            { label: "Yoga", ph: 3 },
+          ].map((b, i) => {
+            const y = 4 + i * 21;
+            const w = (b.ph / 12.5) * 210;
+            return (
+              <g key={b.label}>
+                <text x="0" y={y + 11} fontSize="10" fill="var(--ink-soft)">
+                  {b.label}
+                </text>
+                <rect
+                  x="52"
+                  y={y}
+                  width={w}
+                  height="14"
+                  rx="2"
+                  fill="var(--ink)"
+                  opacity={0.2 + (b.ph / 12.5) * 0.7}
+                />
+                <text
+                  x={52 + w + 6}
+                  y={y + 11}
+                  fontSize="10"
+                  fontWeight="500"
+                  fill="var(--ink)"
+                >
+                  {b.ph} P/h
+                </text>
+              </g>
+            );
+          })}
+        </svg>
 
-        {zeit.length > 0 && (
-          <div>
-            <p className="label mb-1">Nach Zeit</p>
-            <ul className="text-sm">
-              {zeit.map((sp) => (
-                <li key={sp.key} className="flex items-baseline">
-                  <span>{sp.label}</span>
-                  <span className="leader" aria-hidden="true" />
-                  <span className="num">{sp.rate} P/min</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        <Detail summary="Alle Sätze deiner Gruppe">
+          {distanz.length > 0 && (
+            <div className="mb-2">
+              <p className="label mb-1">Nach Distanz</p>
+              <ul>
+                {distanz.map((sp) => (
+                  <li key={sp.key} className="flex items-baseline">
+                    <span>{sp.label}</span>
+                    <span className="leader" aria-hidden="true" />
+                    <span className="num">{sp.rate} P/km</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {zeit.length > 0 && (
+            <div>
+              <p className="label mb-1">Nach Zeit</p>
+              <ul>
+                {zeit.map((sp) => (
+                  <li key={sp.key} className="flex items-baseline">
+                    <span>{sp.label}</span>
+                    <span className="leader" aria-hidden="true" />
+                    <span className="num">{sp.rate} P/min</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Detail>
       </Sheet>
+
+      {sports.length > 0 && (
+        <Sheet>
+          <SectionLabel>Probier es aus</SectionLabel>
+          <p className="text-sm text-ink-soft leading-relaxed mb-3">
+            Was bringt dir eine Einheit? Regler ziehen und schauen.
+          </p>
+          <Calculator sports={sports} />
+        </Sheet>
+      )}
 
       {zeit.length > 0 && (
         <Sheet>
@@ -265,6 +324,61 @@ export default async function InfoPage() {
       <Sheet>
         <SectionLabel>Noch Fragen?</SectionLabel>
         <div>
+          <Detail summary="Was heisst P, P/km, P/min und P/h?">
+            <p>
+              P steht für Punkt. P/km ist der Satz pro Kilometer, P/min der
+              Satz pro Minute — das sind die Zahlen, mit denen wirklich
+              gerechnet wird.
+            </p>
+            <p>
+              P/h (Punkte pro Stunde) taucht nur in Vergleichen auf: es
+              sagt, was eine <em>typische</em> Stunde dieser Sportart etwa
+              bringt. Beim Laufen ergibt sich das aus dem Tempo — wer 12 km
+              in der Stunde läuft, holt 12 P/h. So kann man Sätze über
+              Sportarten hinweg vergleichen, obwohl die einen pro Kilometer
+              und die anderen pro Minute zählen.
+            </p>
+          </Detail>
+
+          <Detail summary="Was zählt als locker, normal und hart?">
+            <p>
+              Massstab ist der typische Ø-Puls <em>derselben Sportart</em>.
+              „Normal“ heisst: dein Schnitt liegt ungefähr dort, wo eine
+              gewöhnliche Einheit dieser Sportart liegt (±10%). Deutlich
+              darunter ist locker, deutlich darüber hart.
+            </p>
+            <p>
+              Konkret, mit Standardannahmen: beim Krafttraining ist ein
+              Ø-Puls um 93–100 normal, beim Fussball einer um 136–153. Wer
+              Ruhepuls und Maximalpuls im Profil hinterlegt, verschiebt
+              diese Grenzen auf sich selbst — ein von Natur aus tiefer Puls
+              wird dann nicht als „locker“ fehlgedeutet.
+            </p>
+            <p>
+              Der Rechner oben zeigt dir die Grenzen für jede Sportart an.
+            </p>
+          </Detail>
+
+          <Detail summary="Wie hängen MET und Puls zusammen?">
+            <p>
+              Zwei verschiedene Jobs. <em>MET</em> vergleicht Sportarten
+              untereinander: es legt den Grundwert fest — was eine typische
+              Stunde Squash gegenüber einer typischen Stunde Yoga wert ist.
+              Daraus kommen die Sätze (P/km, P/min).
+            </p>
+            <p>
+              Der <em>Puls</em> vergleicht nur deine einzelne Einheit mit
+              einer normalen Einheit derselben Sportart und verschiebt die
+              Punkte um ×0.7 bis ×1.4. Er ändert nie, wie viel eine
+              Sportart grundsätzlich wert ist — nur, ob dein heutiges
+              Training über oder unter dem Üblichen lag.
+            </p>
+            <p>
+              Kurz: MET setzt den Preis der Sportart, der Puls bewertet
+              deine Tagesleistung.
+            </p>
+          </Detail>
+
           <Detail summary="Woher kommen meine Aktivitäten?">
             <p>
               Automatisch aus Strava, sobald du eine Aktivität speicherst.

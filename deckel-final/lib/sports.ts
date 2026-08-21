@@ -29,6 +29,13 @@ export interface SportDef {
   /** Strava sport_type values that map to this sport. */
   stravaTypes: string[];
   enabled: boolean;
+  /**
+   * Typischer Ø-Puls dieser Sportart bei normaler Anstrengung, als Anteil
+   * der Herzfrequenzreserve (0-1). Nur fuer Zeit-Sportarten relevant.
+   * Siehe effortFactor() -- der Faktor misst die Abweichung hiervon, nicht
+   * den absoluten Puls.
+   */
+  hrReference?: number;
 }
 
 export const SPORTS_CATALOG: SportDef[] = [
@@ -58,34 +65,43 @@ export const SPORTS_CATALOG: SportDef[] = [
     enabled: false },
 
   // --- time sports: points per minute ---
-  { key: "gym", label: "Kraft & Fitness", unit: "min", rate: 0.15,
+  //
+  // hrReference ist der typische Ø-Puls DIESER Sportart (als Anteil der
+  // Herzfrequenzreserve). Kraftsport liegt tief, weil schwere Saetze kurz
+  // sind und dazwischen pausiert wird -- das ist keine geringere
+  // Anstrengung, sondern eine andere Physiologie. Ohne diese Bezugsgroesse
+  // wuerde Kraftsport gegenueber Ballsport systematisch verlieren.
+  //
+  // Werte mit echten Gruppendaten abgeglichen: Median Ø-Puls war
+  // Kraft 96, Golf 107, Fussball 147.
+  { key: "gym", label: "Kraft & Fitness", unit: "min", rate: 0.15, hrReference: 0.28,
     stravaTypes: ["WeightTraining", "Workout", "Crossfit", "HighIntensityIntervalTraining", "Elliptical", "StairStepper"],
     enabled: false },
-  { key: "yoga", label: "Yoga & Pilates", unit: "min", rate: 0.1,
+  { key: "yoga", label: "Yoga & Pilates", unit: "min", rate: 0.1, hrReference: 0.18,
     stravaTypes: ["Yoga", "Pilates"], enabled: false },
   // Racketsport war frueher ein einziger Sammeleintrag. Das machte Tennis
   // unauffindbar -- wer "Tennis" sucht, sucht nicht nach "Racketsport" --
   // und warf ausserdem Tischtennis mit Squash in einen Topf, obwohl die
   // Belastung voellig verschieden ist.
-  { key: "tennis", label: "Tennis", unit: "min", rate: 0.15,
+  { key: "tennis", label: "Tennis", unit: "min", rate: 0.15, hrReference: 0.5,
     stravaTypes: ["Tennis", "Pickleball"], enabled: false },
-  { key: "squash", label: "Squash", unit: "min", rate: 0.18,
+  { key: "squash", label: "Squash", unit: "min", rate: 0.18, hrReference: 0.6,
     stravaTypes: ["Squash", "Racquetball"], enabled: false },
-  { key: "badminton", label: "Badminton", unit: "min", rate: 0.15,
+  { key: "badminton", label: "Badminton", unit: "min", rate: 0.15, hrReference: 0.48,
     stravaTypes: ["Badminton"], enabled: false },
-  { key: "tabletennis", label: "Tischtennis", unit: "min", rate: 0.1,
+  { key: "tabletennis", label: "Tischtennis", unit: "min", rate: 0.1, hrReference: 0.3,
     stravaTypes: ["TableTennis"], enabled: false },
-  { key: "football", label: "Fussball", unit: "min", rate: 0.15,
+  { key: "football", label: "Fussball", unit: "min", rate: 0.15, hrReference: 0.65,
     stravaTypes: ["Soccer"], enabled: false },
-  { key: "climb", label: "Klettern", unit: "min", rate: 0.15,
+  { key: "climb", label: "Klettern", unit: "min", rate: 0.15, hrReference: 0.33,
     stravaTypes: ["RockClimbing"], enabled: false },
-  { key: "watersport", label: "Surfen & Segeln", unit: "min", rate: 0.12,
+  { key: "watersport", label: "Surfen & Segeln", unit: "min", rate: 0.12, hrReference: 0.33,
     stravaTypes: ["Surfing", "Kitesurf", "Windsurf", "Sail"], enabled: false },
   // Golf wurde nach Dauer kalibriert -- bei Golf ist die Dauer aber
   // groesstenteils Warten. Mit 0.06 P/min brachte eine 4-Stunden-Runde
   // 14.4 Punkte, so viel wie 14.4 km Laufen. Eine 18-Loch-Runde zu Fuss
   // sind etwa 9 km Gehen, also rund 3 Punkte -- daher 0.02.
-  { key: "golf", label: "Golf", unit: "min", rate: 0.02,
+  { key: "golf", label: "Golf", unit: "min", rate: 0.02, hrReference: 0.36,
     stravaTypes: ["Golf"], enabled: false },
 ];
 
@@ -158,52 +174,66 @@ export interface HeartRateProfile {
 /* ------------------------------------------------------------------
  * Anstrengungsfaktor fuer Zeit-Sportarten.
  *
- * Bei Distanz-Sportarten (Laufen, Velo, ...) ist Tempo egal -- ein
- * lockerer Erholungslauf bekommt schon durch die Kilometer die richtige
- * (volle) Wertung. Bei Zeit-Sportarten (Kraft, Yoga, Racketsport, ...)
- * ist Zeit dagegen die einzige Groesse, und Zeit laesst sich mit Pausen
- * strecken -- zwei Stunden mit viel Leerlauf zaehlen sonst gleich viel
- * wie eine durchgehend geforderte Stunde.
+ * Das Problem: bei Distanz-Sportarten ist Tempo egal -- ein lockerer
+ * Erholungslauf bekommt ueber die Kilometer schon die richtige (volle)
+ * Wertung. Bei Zeit-Sportarten ist Zeit die EINZIGE Groesse, und Zeit
+ * laesst sich mit Leerlauf strecken: zwei Stunden im Gym mit 25 Minuten
+ * echter Arbeit zaehlen sonst gleich viel wie zwei Stunden Arbeit.
  *
- * Der Puls-Durchschnitt der ganzen Aktivitaet loest genau das: eine
- * Session mit vielen kurzen, harten Saetzen und normalen Pausen bleibt
- * im Schnitt hoch; eine Session, die grossteils Leerlauf war, faellt ab.
- * Absichtlich NICHT bestraft wird "hat Pausen gemacht" an sich -- jedes
- * vernuenftige Krafttraining hat welche.
+ * Die naheliegende Loesung -- absoluter Ø-Puls -- ist falsch, und zwar
+ * messbar. Aus den echten Daten dieser Gruppe (Median Ø-Puls):
  *
- * Zwei Massstaebe:
- *  - Mit hinterlegtem Ruhepuls/Maximalpuls: relativ zur eigenen
- *    Herzfrequenzreserve (Karvonen) -- fair unabhaengig vom individuellen
- *    Ruhepuls.
- *  - Ohne Profil: feste bpm-Schwellen als Rueckfall. Schwaecher, aber
- *    besser als nichts.
+ *     Kraft & Fitness   96
+ *     Golf             107
+ *     Fussball         147
  *
- * Fehlt der Puls ganz (kein Gurt, manueller Eintrag): Faktor 1 (neutral)
+ * Golf liegt ueber Kraftsport. Nicht weil Golf anstrengender waere,
+ * sondern weil Golf durchgehendes Gehen ist und Kraftsport aus kurzen,
+ * schweren Saetzen mit Pausen besteht. Ein universeller Puls-Massstab
+ * wuerde Kraftsport also systematisch bestrafen und Ballsport belohnen --
+ * das hat mit Anstrengung nichts zu tun, nur mit Physiologie.
+ *
+ * Darum wird jede Sportart an IHREM eigenen Normalwert gemessen
+ * (SportDef.hrReference). Der Faktor sagt: "wie hart war diese Einheit
+ * verglichen mit einer normalen Einheit derselben Sportart?" Ein
+ * verschlafenes Krafttraining faellt ab, ein hartes wird belohnt -- aber
+ * Kraftsport als Ganzes verliert nicht gegen Fussball. Wie viel eine
+ * Sportart grundsaetzlich wert ist, entscheidet allein ihr Satz (rate),
+ * und den stellt die Gruppe selbst ein.
+ *
+ * Zwei Massstaebe fuer den Vergleich:
+ *  - Mit hinterlegtem Ruhepuls/Maximalpuls: ueber die eigene
+ *    Herzfrequenzreserve (Karvonen) -- fair unabhaengig davon, ob jemand
+ *    von Natur aus einen tiefen oder hohen Puls hat.
+ *  - Ohne Profil: derselbe Vergleich, aber mit Standardannahmen
+ *    (Ruhepuls 60, Maximalpuls 190). Ungenauer, aber nie schlechter als
+ *    gar keine Wertung.
+ *
+ * Fehlt der Puls ganz (kein Gurt, manueller Eintrag): Faktor 1, neutral
  * -- weder Bonus noch Strafe.
- *
- * Erster Entwurf, kalibriert an echten Trainingsdaten der Gruppe.
- * Absichtlich nachjustierbar, sobald mehr Sessions vorliegen.
  * ------------------------------------------------------------------ */
 
+/** Annahmen fuer alle, die kein eigenes Puls-Profil hinterlegt haben. */
+const DEFAULT_RESTING_HR = 60;
+const DEFAULT_MAX_HR = 190;
+
 interface EffortZone {
+  /** Obergrenze des Verhaeltnisses Ist-Puls zu Normalwert der Sportart. */
   max: number;
   factor: number;
 }
 
-const EFFORT_ZONES_ABSOLUTE_BPM: EffortZone[] = [
-  { max: 90, factor: 0.6 },
-  { max: 105, factor: 0.8 },
-  { max: 120, factor: 1.0 },
-  { max: 140, factor: 1.25 },
-  { max: Infinity, factor: 1.5 },
-];
-
-const EFFORT_ZONES_PERCENT_HRR: EffortZone[] = [
-  { max: 25, factor: 0.6 },
-  { max: 40, factor: 0.8 },
-  { max: 55, factor: 1.0 },
-  { max: 70, factor: 1.25 },
-  { max: Infinity, factor: 1.5 },
+/**
+ * Abweichung vom Normalwert der Sportart. 1.0 heisst "genau normal".
+ * Bewusst breite mittlere Zone: Tagesform, Wetter und Messgenauigkeit
+ * schwanken, und dafuer soll niemand Geld zahlen.
+ */
+const EFFORT_ZONES_RATIO: EffortZone[] = [
+  { max: 0.7, factor: 0.7 },
+  { max: 0.9, factor: 0.85 },
+  { max: 1.1, factor: 1.0 },
+  { max: 1.3, factor: 1.2 },
+  { max: Infinity, factor: 1.4 },
 ];
 
 function zoneFactor(value: number, zones: EffortZone[]): number {
@@ -214,24 +244,45 @@ function zoneFactor(value: number, zones: EffortZone[]): number {
 }
 
 /**
- * Anstrengungsfaktor fuer eine Aktivitaet mit gegebenem Ø-Puls.
- * Ohne Pulsdaten: 1 (neutral). Mit Profil: relativ (%HFR). Ohne Profil,
- * aber mit Puls: absolute bpm-Schwellen.
+ * Anteil der Herzfrequenzreserve (0-1) fuer einen gemessenen Ø-Puls.
+ *
+ * Das Profil gilt bewusst nur als Ganzes: entweder beide Werte sind da und
+ * ergeben zusammen Sinn, oder es zaehlen beide Standardannahmen. Ein
+ * halbes Profil -- echter Ruhepuls, geschaetzter Maximalpuls -- wuerde die
+ * Spanne verzerren und je nach Person in eine andere Richtung.
+ */
+function heartRateReserveFraction(
+  avgHeartrate: number,
+  profile?: HeartRateProfile | null
+): number {
+  const usable =
+    profile?.restingHr != null &&
+    profile.restingHr > 0 &&
+    profile.maxHr != null &&
+    profile.maxHr > profile.restingHr;
+
+  const resting = usable ? profile!.restingHr! : DEFAULT_RESTING_HR;
+  const max = usable ? profile!.maxHr! : DEFAULT_MAX_HR;
+
+  return Math.max(0, (avgHeartrate - resting) / (max - resting));
+}
+
+/**
+ * Anstrengungsfaktor: wie hart war diese Einheit im Vergleich zu einer
+ * normalen Einheit derselben Sportart?
+ *
+ * Ohne Pulsdaten oder ohne Normalwert fuer die Sportart: 1 (neutral).
  */
 export function effortFactor(
   avgHeartrate: number | null | undefined,
-  profile?: HeartRateProfile | null
+  profile?: HeartRateProfile | null,
+  hrReference?: number | null
 ): number {
   if (avgHeartrate == null || avgHeartrate <= 0) return 1;
+  if (hrReference == null || hrReference <= 0) return 1;
 
-  const restingHr = profile?.restingHr;
-  const maxHr = profile?.maxHr;
-  if (restingHr != null && maxHr != null && maxHr > restingHr) {
-    const pctHrr = ((avgHeartrate - restingHr) / (maxHr - restingHr)) * 100;
-    return zoneFactor(Math.max(0, pctHrr), EFFORT_ZONES_PERCENT_HRR);
-  }
-
-  return zoneFactor(avgHeartrate, EFFORT_ZONES_ABSOLUTE_BPM);
+  const fraction = heartRateReserveFraction(avgHeartrate, profile);
+  return zoneFactor(fraction / hrReference, EFFORT_ZONES_RATIO);
 }
 
 /** Points for one activity under the given sports config. Unknown sports score 0. */
@@ -243,7 +294,7 @@ export function pointsForScorable(
   const sport = sportByKey(a.sportKey, sports);
   if (!sport) return 0;
   if (sport.unit === "km") return a.distanceKm * sport.rate;
-  const factor = effortFactor(a.avgHeartrate, profile);
+  const factor = effortFactor(a.avgHeartrate, profile, sport.hrReference);
   return Math.round(a.movingTimeMin * sport.rate * factor * 100) / 100;
 }
 

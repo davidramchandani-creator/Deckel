@@ -84,8 +84,9 @@ export function HeartRateProfile({
       </div>
 
       <p className="text-xs text-ink-soft leading-relaxed">
-        Beide Felder leer lassen entfernt dein Profil wieder. Woher die Zahl
-        kommt ist egal — Uhr, Pulsrechner oder Schätzung.
+        Es zählen nur beide Werte zusammen — ein einzelner verschiebt die
+        Spanne und wird ignoriert. Woher die Zahl kommt, ist egal: Uhr,
+        Pulsrechner oder Schätzung. Beide leer lassen entfernt dein Profil.
       </p>
 
       {state.status === "error" && <p className="text-accent">{state.message}</p>}

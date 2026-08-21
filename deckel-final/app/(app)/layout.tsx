@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { signOut } from "@/lib/actions/auth";
 import { BottomNav } from "@/components/nav";
@@ -41,11 +42,37 @@ export default async function AppLayout({
         style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
       >
         <PageTitle />
-        <form action={signOut}>
-          <button type="submit" className="btn btn-quiet text-xs">
-            Abmelden
-          </button>
-        </form>
+        <div className="flex items-center gap-1">
+          {/* Die Regeln muessen von ueberall erreichbar sein, ohne einen
+              fuenften Platz in der Navigation zu belegen. */}
+          <Link
+            href="/info"
+            aria-label="So funktioniert's"
+            title="So funktioniert's"
+            className="btn btn-quiet text-xs w-8 h-8 p-0 flex items-center justify-center"
+          >
+            <svg
+              width={17}
+              height={17}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.7}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 16v-4.5" />
+              <path d="M12 8.2h.01" />
+            </svg>
+          </Link>
+          <form action={signOut}>
+            <button type="submit" className="btn btn-quiet text-xs">
+              Abmelden
+            </button>
+          </form>
+        </div>
       </header>
 
       <main key="content" className="flex-1 px-4 py-4 pb-6">

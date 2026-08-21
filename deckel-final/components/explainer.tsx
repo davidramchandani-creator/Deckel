@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 /**
@@ -68,12 +69,10 @@ export function Explainer({
             </p>
             {sports.some((sp) => sp.unit === "min") && (
               <p className="mt-1.5">
-                Bei Kraft, Yoga & Co. ist Minuten × Satz nur die Basis: dazu
-                kommt ein Anstrengungsfaktor nach Ø-Puls, damit eine Stunde
-                mit viel Leerlauf nicht gleich viel bringt wie eine Stunde
-                durchgehender Arbeit. Wer Ruhepuls und Maximalpuls im Profil
-                hinterlegt, wird relativ zu sich selbst bewertet; sonst gelten
-                feste Puls-Schwellen.
+                Bei Sportarten nach Zeit ist Minuten × Satz nur die Basis:
+                dazu kommt ein Anstrengungsfaktor nach Ø-Puls. Verglichen
+                wird immer mit einer normalen Einheit derselben Sportart —
+                Krafttraining also mit Krafttraining, nicht mit Fussball.
               </p>
             )}
           </div>
@@ -137,6 +136,13 @@ export function Explainer({
               essen.
             </p>
           </div>
+
+          <Link
+            href="/info"
+            className="btn btn-secondary w-full text-xs"
+          >
+            Alle Regeln im Detail
+          </Link>
         </div>
       )}
     </div>
